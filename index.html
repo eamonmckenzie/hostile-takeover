@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>Hostile Takeover</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
@@ -10,10 +11,38 @@
   html,body{margin:0;height:100%;background:#07070b;overflow:hidden}
   body{display:flex;align-items:center;justify-content:center}
   canvas{width:min(100vw,calc(100vh*16/9));aspect-ratio:16/9;height:auto;image-rendering:pixelated;display:block;background:#000}
+  body.touch{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  #touch{display:none;position:fixed;inset:0;pointer-events:none;font-family:"Press Start 2P",monospace}
+  body.touch #touch{display:block}
+  #stick{position:absolute;left:calc(18px + env(safe-area-inset-left));bottom:calc(18px + env(safe-area-inset-bottom));width:140px;height:140px;border-radius:50%;
+         background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.3);pointer-events:auto;touch-action:none}
+  #knob{position:absolute;left:45px;top:45px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.35)}
+  #btns{position:absolute;right:calc(14px + env(safe-area-inset-right));bottom:calc(14px + env(safe-area-inset-bottom));display:grid;
+        grid-template-columns:repeat(3,66px);gap:8px;pointer-events:auto}
+  #touch button{width:66px;height:66px;border-radius:50%;border:2px solid rgba(255,255,255,.45);color:#fff;font:9px "Press Start 2P",monospace;
+        background:rgba(0,0,0,.35);touch-action:none;padding:0}
+  #touch button.on{background:rgba(255,216,74,.55)}
+  #touch .b-punch{background:rgba(220,40,40,.4)} #touch .b-grab{background:rgba(255,60,60,.25)} #touch .b-special{background:rgba(118,255,3,.3)}
+  #touch .top{position:absolute;top:calc(10px + env(safe-area-inset-top));width:auto;height:34px;border-radius:17px;padding:0 14px;pointer-events:auto}
+  #tstart{left:50%;transform:translateX(-50%)} #tpause{right:calc(12px + env(safe-area-inset-right))} #tgore{left:calc(12px + env(safe-area-inset-left))}
 </style>
 </head>
 <body>
 <canvas id="c" width="960" height="540"></canvas>
+<div id="touch">
+  <div id="stick"><div id="knob"></div></div>
+  <div id="btns">
+    <button class="b-special" data-a="special">KEY<br>NOTE</button>
+    <button class="b-grab" data-a="grab">GRAB</button>
+    <button data-a="jump">JUMP</button>
+    <span></span>
+    <button data-a="kick">KICK</button>
+    <button class="b-punch" data-a="punch">PUNCH</button>
+  </div>
+  <button class="top" id="tstart" data-a="start">START</button>
+  <button class="top" id="tpause" data-a="pause">PAUSE</button>
+  <button class="top" id="tgore" data-a="gore">GORE</button>
+</div>
 <script>
 'use strict';
 /* =========================================================
@@ -41,6 +70,7 @@ const MAP = {
   KeyI:'special', KeyB:'special', Enter:'start', KeyP:'pause', Escape:'pause', KeyG:'gore'
 };
 addEventListener('keydown', e => {
+  if (!e.repeat) anyInput = true;
   const a = MAP[e.code]; if (!a) return;
   e.preventDefault(); initAudio();
   if (!keys[a]) pressed[a] = true;
@@ -48,6 +78,39 @@ addEventListener('keydown', e => {
 });
 addEventListener('keyup', e => { const a = MAP[e.code]; if (a) { keys[a] = false; e.preventDefault(); } });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+
+/* ---------------- touch controls ---------------- */
+function vPress(a) { initAudio(); anyInput = true; if (!keys[a]) pressed[a] = true; keys[a] = true; }
+function vRelease(a) { keys[a] = false; }
+(function setupTouch() {
+  if (!(matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window)) return;
+  document.body.classList.add('touch');
+  document.querySelectorAll('#touch button').forEach(b => {
+    const a = b.dataset.a;
+    b.addEventListener('pointerdown', e => { e.preventDefault(); b.setPointerCapture(e.pointerId); b.classList.add('on'); vPress(a); });
+    const up = e => { b.classList.remove('on'); vRelease(a); };
+    b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('lostpointercapture', up);
+    b.addEventListener('contextmenu', e => e.preventDefault());
+  });
+  const stick = document.getElementById('stick'), knob = document.getElementById('knob');
+  let sid = null;
+  const setDir = (dx, dy) => {
+    const r = 70, m = Math.hypot(dx, dy), k = m > r ? r / m : 1;
+    knob.style.transform = `translate(${dx * k}px,${dy * k}px)`;
+    const dz = 18;
+    const nl = dx < -dz, nr = dx > dz, nu = dy < -dz, nd = dy > dz;
+    if (nl || nr || nu || nd) anyInput = true;
+    keys.left = nl; keys.right = nr; keys.up = nu; keys.down = nd;
+  };
+  const center = () => { const r = stick.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
+  stick.addEventListener('pointerdown', e => { e.preventDefault(); initAudio(); anyInput = true; sid = e.pointerId; stick.setPointerCapture(sid); const [cx, cy] = center(); setDir(e.clientX - cx, e.clientY - cy); });
+  stick.addEventListener('pointermove', e => { if (e.pointerId !== sid) return; const [cx, cy] = center(); setDir(e.clientX - cx, e.clientY - cy); });
+  const end = e => { if (e.pointerId !== sid) return; sid = null; setDir(0, 0); };
+  stick.addEventListener('pointerup', end); stick.addEventListener('pointercancel', end);
+  // tapping the game screen starts / dismisses demo
+  cv.addEventListener('pointerdown', e => { e.preventDefault(); vPress('start'); setTimeout(() => vRelease('start'), 50); });
+  document.addEventListener('touchmove', e => e.preventDefault(), { passive:false });
+})();
 
 /* ---------------- audio (synthesized) ---------------- */
 let AC = null, noiseBuf = null;
@@ -88,7 +151,9 @@ const SFX = {
   die: () => tone(.5, 220, 40, .18, 'sawtooth'),
   go: () => { tone(.1, 660, 660, .1); tone(.1, 880, 880, .1, 'square', .12); },
   special: () => { [220, 277, 330, 440].forEach((f, i) => tone(.7, f, f * 2, .1, 'sawtooth', i * .06)); noise(.9, 4000, .3, 'lowpass', 200); },
-  fanfare: () => { [523, 659, 784, 1046].forEach((f, i) => tone(.25, f, f, .1, 'square', i * .12)); }
+  fanfare: () => { [523, 659, 784, 1046].forEach((f, i) => tone(.25, f, f, .1, 'square', i * .12)); },
+  kiss: () => { tone(.15, 900, 1800, .1, 'sine'); tone(.2, 1400, 700, .08, 'sine', .15); },
+  pee: () => noise(.12, 5000, .05, 'highpass')
 };
 
 /* ---------------- data ---------------- */
@@ -102,6 +167,10 @@ const TYPES = {
   counsel: { name:'GENERAL COUNSEL', hp:320, spd:1.7, dmg:13, reach:62, skin:'#b88060', hair:'#8a8a8a', top:'#222222', top2:'#111111', pants:'#222222', shoe:'#000', tie:'#a00000', briefcase:true, block:.25, boss:true, scale:1.4, score:3000 },
   chairman:{ name:'CHAIRMAN OF THE BOARD', hp:420, spd:1.8, dmg:15, reach:66, skin:'#e8c0a0', hair:'#f4f4f4', top:'#5a5a62', top2:'#44444a', pants:'#3a3a40', shoe:'#000', tie:'#1a6a3a', bald:true, mustache:true, boss:true, scale:1.5, score:5000 }
 };
+TYPES.vivian = { name:'VIVIAN VOLTAGE', hp:999, spd:2.6, dmg:9, reach:62, skin:'#f0c8a8', hair:'#1a1010', top:'#c0103a', top2:'#900a2a',
+                 pants:'#f0c8a8', shoe:'#c0103a', dress:true, longhair:true, lips:true, boss:true, untouchable:true, scale:1.3, score:0 };
+const FLIRTS = ['OOH, A GPU? FOR ME?', 'YOU REALLY KNOW HOW TO SCALE.', 'MMM, SO MANY TENSOR CORES...',
+                "IS IT HOT IN HERE, OR IS IT THE THERMALS?", 'COME HERE, BIG SPENDER.'];
 const TAUNT = {
   intern:'IS THIS PAID?', manager:"LET'S CIRCLE BACK!", lawyer:'OBJECTION!', hr:'THIS GOES IN YOUR FILE!',
   vp:"LET'S SYNERGIZE, JANSEN!", counsel:'I ADVISE AGAINST THIS.', chairman:'THE BOARD HAS VOTED, JANSEN.'
@@ -149,25 +218,38 @@ const STAGES = [
     waves:[ { at:450,  e:['lawyer','manager','manager'] },
             { at:1200, e:['hr','hr','lawyer','intern','intern'] },
             { at:2100, e:['lawyer','lawyer','manager','manager','hr'] },
-            { at:3100, boss:true, e:['chairman','manager','manager'] } ] }
+            { at:3100, boss:true, e:['chairman','manager','manager'] } ] },
+  { name:'FLOOR 100', sub:'THE PENTHOUSE', len:960, final:true,
+    th:{ wall:'#2a1030', wall2:'#22092a', ceil:'#14060f', floor:'#5a1a3a', floor2:'#4a1030', base:'#d4a020', sky:'#ff7a5a', city:'#5a2a5a', door:'#3a1a2a' },
+    posters:['MERGERS','ACQUISITIONS','LUXURY','BUY BUY BUY','HOSTILE BIDS'],
+    signs:['PENTHOUSE','SPA','WINE CELLAR','HELIPAD'],
+    items:[[300,'gpu'],[700,'gpu']], waves:[] }
 ];
+const GPU_GOAL = 5, FINAL_TIME = 30 * 60;
 
 /* ---------------- state ---------------- */
 let mode = 'title', S = STAGES[0], P = null, stageIdx = 0, camX = 0, lock = false, waveIdx = 0;
 let queue = [], spawnT = 0, enemies = [], parts = [], pops = [], projs = [], items = [], decals = [];
 let shake = 0, hitstop = 0, flashA = 0, frame = 0, score = 0, lives = 2, banner = 0, goT = 0, modeT = 0, paused = false;
+let heads = [], fin = null, demo = false, demoT = 0, demoCd = 0, titleIdle = 0, anyInput = false, endKind = '';
+const IS_TOUCH = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 
 function newPlayer() {
   return { T:TYPES.player, x:120, y:430, z:0, vx:0, vz:0, face:1, hp:100, maxHp:100, state:'idle', t:0, pose:'idle',
            anim:0, combo:0, comboT:0, inv:0, flash:0, weapon:null, hype:0, hitList:[], atk:null, pend:null };
 }
-function startGame() { score = 0; lives = 2; P = newPlayer(); loadStage(0); }
+function startGame() { score = 0; lives = 2; P = newPlayer(); P.gpus = 0; endKind = ''; loadStage(0); }
 function loadStage(i) {
   stageIdx = i; S = STAGES[i]; camX = 0; lock = false; waveIdx = 0; queue = [];
-  enemies = []; parts = []; pops = []; projs = []; decals = [];
+  enemies = []; parts = []; pops = []; projs = []; decals = []; heads = []; fin = null;
   items = S.items.map(([x, k]) => ({ kind:k, x, y:rnd(FT + 25, FB - 15), uses:WUSES[k] }));
-  Object.assign(P, { x:120, y:430, z:0, vx:0, vz:0, face:1, state:'idle', t:0, weapon:null, atk:null, inv:60 });
+  Object.assign(P, { x:120, y:430, z:0, vx:0, vz:0, face:1, state:'idle', t:0, weapon:null, atk:null, inv:60, dc:null, peeing:false, headless:false });
   banner = 200; goT = 0; mode = 'play';
+  if (S.final) {
+    lock = true;
+    const v = makeEnemy('vivian', 1); v.cd = 99999; enemies.push(v);
+    fin = { phase:'intro', t:0, given:0, timer:FINAL_TIME, dropT:240, v };
+  }
 }
 function makeEnemy(type, side) {
   const T = TYPES[type];
@@ -188,7 +270,57 @@ function spurt(e) {
   for (let i = 0; i < 3; i++)
     parts.push({ x:s.x, y:e.y + 1, z:s.z, vx:e.face * rnd(1, 4), vy:rnd(-.5, .5), vz:rnd(3, 7.5), life:70, c:bloodCol(), s:3 });
 }
-function addDecal(x, y, r) { if (!gore) return; decals.push({ x, y, r }); if (decals.length > 140) decals.shift(); }
+function addDecal(x, y, r, c) { if (!gore) return; decals.push({ x, y, r, c:c || 'rgba(120,0,0,.75)' }); if (decals.length > 160) decals.shift(); }
+function neckSpurt(e) {
+  const sc = e.T.scale || 1, lying = e.state === 'dead' || e.state === 'down';
+  const nx = lying ? e.x - e.face * 28 * PX * sc * .9 : e.x, nz = lying ? 6 : 26 * PX * sc;
+  for (let i = 0; i < 2; i++)
+    parts.push({ x:nx, y:e.y + 1, z:nz, vx:(lying ? -e.face * rnd(1, 4) : rnd(-1.5, 1.5)), vy:rnd(-.5, .5), vz:rnd(4, 8), life:70, c:bloodCol(), s:3 });
+}
+function hearts(x, y, z, n) {
+  for (let i = 0; i < n; i++) parts.push({ x:x + rnd(-20, 20), y, z:z + rnd(-10, 10), vx:rnd(-1, 1), vy:0, vz:rnd(1, 3), life:rnd(50, 80), c:'#ff4f9a', s:4, heart:true, float:true });
+}
+function spawnHead(v, dir) {
+  const sc = v.T.scale || 1;
+  const h = { x:v.x, y:v.y, z:29 * PX * sc, vx:dir * 2.4, vz:6, T:v.T, sc, spin:0 };
+  heads.push(h); if (heads.length > 24) heads.shift();
+  return h;
+}
+/* decapitation finisher; attacker a (player or Vivian), victim stored in a.dc.v */
+function startDecap(a, v) {
+  a.dc = { t:0, v, head:null }; a.face = v.x >= a.x ? 1 : -1;
+  if (v === P) { P.state = 'victim'; P.weapon = null; P.atk = null; }
+  else { v.state = 'ripped'; v.t = 0; v.vx = 0; v.z = 0; v.vz = 0; }
+}
+function updDecap(a) {
+  const d = a.dc, v = d.v, sc = a.T.scale || 1; d.t++;
+  const t = d.t;
+  if (t < 20) {
+    a.pose = 'rip';
+    v.x = a.x + a.face * 34 * sc; v.y = a.y; v.face = -a.face; v.pose = v === P ? 'hurt' : 'ripped';
+    if (t === 8 || t === 14) { SFX.hit(); shake = 3; }
+  }
+  if (t === 20) {
+    v.headless = true;
+    d.head = spawnHead(v, a.face);
+    SFX.rip(); shake = 14; hitstop = 8;
+    for (let i = 0; i < 4; i++) neckSpurt(v);
+    bleed(v.x, v.y, 26 * PX * (v.T.scale || 1), a.face, 30);
+    pop(v.x, v.y, 130, 'DECAPITATED!', '#ff3030', 20);
+    if (v === P) { P.state = 'down'; P.t = 0; P.vz = 3; P.vx = a.face * 1.5; P.dying = false; }
+    else killEnemy(v, a.face, { kb:-1.4, decap:true });
+  }
+  if (t > 20 && t < 42) a.pose = 'idle';
+  const peeEnd = gore ? 135 : 45;
+  a.peeing = gore && t >= 42 && t < peeEnd;
+  if (a.peeing) {
+    const h = d.head; a.pose = 'pee'; a.face = h.x >= a.x ? 1 : -1;
+    if (t === 44) pop(a.x, a.y, 85 * sc, 'TOTAL HUMILIATION!', '#ffe23a', 16);
+    if (t % 6 === 0) SFX.pee();
+    if (t % 12 === 0) addDecal(h.x + rnd(-6, 6), h.y + 2, rnd(6, 12), 'rgba(230,200,40,.55)');
+  }
+  return t >= peeEnd;
+}
 function pop(x, y, z, text, color, size) { pops.push({ x, y, z, text, color:color || '#fff', size:size || 14, life:75 }); }
 function say(e, text) { pops.push({ follow:e, text, life:130, bubble:true }); }
 
@@ -196,11 +328,19 @@ function say(e, text) { pops.push({ follow:e, text, life:130, bubble:true }); }
 function hittable(e) {
   return e.state !== 'dead' && e.state !== 'ripped' && e.state !== 'down' && e.state !== 'getup' && e.state !== 'enter' && e.inv <= 0;
 }
-function rippable(e) {
-  return !e.armless && ['idle','hurt','windup','attack','toss','stagger'].includes(e.state) && e.hp <= e.maxHp * (e.T.boss ? .3 : .45);
+// which finisher (if any) is available on this enemy: arm rip first, then decapitation
+function finisher(e) {
+  if (e.T.untouchable || e.headless) return null;
+  if (!['idle','hurt','windup','attack','toss','stagger'].includes(e.state) || e.hp > e.maxHp * (e.T.boss ? .3 : .45)) return null;
+  return e.armless ? 'decap' : 'rip';
 }
+const rippable = e => finisher(e) !== null;
 function hitEnemy(e, a, dir) {
   const T = e.T;
+  if (T.untouchable) {
+    if (frame - (e.lastMsg || -999) > 90) { e.lastMsg = frame; pop(e.x, e.y, 150, "SHE ONLY WANTS GPUs!", '#ff7ab8', 11); }
+    SFX.block(); return false;
+  }
   if (T.block && !a.weapon && !a.special && e.state === 'idle' && Math.random() < T.block) {
     e.face = -dir; e.vx = dir * 2; SFX.block();
     pop(e.x, e.y, 105 * (T.scale || 1), 'BLOCKED', '#9cf', 10); return false;
@@ -224,13 +364,17 @@ function killEnemy(e, dir, a) {
   const ownArm = (a.armOwner === e) || (a.weapon && !a.armOwner && P.weapon && P.weapon.kind === 'arm' && P.weapon.owner === e);
   if (ownArm) { txt = 'BEATEN WITH THEIR OWN ARM!'; col = '#ff4040'; score += 500; size = 14; }
   if (e.T.boss) { txt = e.T.name + ' TERMINATED!'; size = 16; }
-  pop(e.x, e.y, 115 * (e.T.scale || 1), txt, col, size);
+  if (a.decap) score += 600; else pop(e.x, e.y, 115 * (e.T.scale || 1), txt, col, size);
+  // employees drop the GPUs they were hoarding
+  const n = e.T.boss ? 3 : (Math.random() < .4 ? 1 : 0);
+  for (let i = 0; i < n; i++) items.push({ kind:'gpu', x:e.x + rnd(-30, 30), y:clamp(e.y + rnd(-14, 14), FT, FB) });
 }
 function hurtPlayer(dmg, dir, knock) {
-  if (P.inv > 0 || mode !== 'play' || ['down','special','rip'].includes(P.state)) return;
+  if (P.inv > 0 || mode !== 'play' || ['down','special','rip','decap','victim','cutscene'].includes(P.state)) return;
   P.hp -= dmg; P.flash = 12; SFX.hurt(); shake = Math.max(shake, 6);
   bleed(P.x, P.y, 60, dir, 6);
   P.atk = null; P.pend = null;
+  if (P.hp <= 0 && fin) { P.hp = 0; startFinalFail(); return; }
   if (P.hp <= 0) { P.hp = 0; P.dying = true; knock = true; }
   if (P.weapon && knock) dropWeapon();
   if (knock) { P.state = 'down'; P.t = 0; P.vz = 5; P.vx = dir * 4; }
@@ -255,6 +399,13 @@ function startSpecial() {
   pop(P.x, P.y, 150, 'BEHOLD... THE NEW ARCHITECTURE!', '#76ff03', 14);
 }
 function doGrab() {
+  if (fin && fin.phase === 'fight') {
+    const v = fin.v;
+    if (Math.abs(v.x - P.x) < 80 && Math.abs(v.y - P.y) < 30) {
+      if (P.gpus > 0 && ['idle','wander','hurt'].includes(v.state)) { giveGpu(); return; }
+      if (P.gpus <= 0) { pop(P.x, P.y, 120, 'NO GPUs! FIND SOME!', '#fff', 11); return; }
+    }
+  }
   if (P.weapon) { throwWeapon(); return; }
   let best = null, bd = 1e9;
   for (const e of enemies) {
@@ -262,9 +413,13 @@ function doGrab() {
     const dx = Math.abs(e.x - P.x), dy = Math.abs(e.y - P.y);
     if (dx < 72 * (e.T.scale || 1) && dy < 24 && dx < bd) { best = e; bd = dx; }
   }
-  if (best) { startRip(best); return; }
+  if (best) {
+    if (finisher(best) === 'decap') { P.state = 'decap'; P.t = 0; startDecap(P, best); }
+    else startRip(best);
+    return;
+  }
   for (const it of items) {
-    if (Math.abs(it.x - P.x) < 46 && Math.abs(it.y - P.y) < 30) {
+    if (it.kind !== 'gpu' && Math.abs(it.x - P.x) < 46 && Math.abs(it.y - P.y) < 30) {
       items.splice(items.indexOf(it), 1); SFX.pickup();
       if (it.kind === 'donut') { P.hp = Math.min(P.maxHp, P.hp + 35); pop(P.x, P.y, 105, '+35 HP  DONUT!', '#7f7', 12); }
       else { P.weapon = { kind:it.kind, uses:it.uses || WUSES[it.kind], top:it.top, top2:it.top2, skin:it.skin, owner:it.owner };
@@ -300,6 +455,60 @@ function landProj(pr) {
     const uses = (pr.w.uses || 1) - 1;
     if (pr.kind === 'chair' || uses > 0)
       items.push(Object.assign({}, pr.w, { x:clamp(pr.x, camX + 30, camX + W - 30), y:pr.y, uses:Math.max(1, uses) }));
+  }
+}
+
+/* ---------------- final boss: Vivian Voltage ---------------- */
+function giveGpu() {
+  const v = fin.v; P.gpus--; fin.given++;
+  P.state = 'pick'; P.t = 0; P.face = v.x >= P.x ? 1 : -1;
+  v.state = 'flirt'; v.t = 0; v.face = -P.face; v.cd = 60;
+  hearts(v.x, v.y, 110, 10); SFX.kiss();
+  say(v, FLIRTS[Math.min(fin.given - 1, FLIRTS.length - 1)]);
+  pop(P.x, P.y, 120, 'GPU GIVEN  ' + fin.given + '/' + GPU_GOAL, '#76ff03', 12);
+  score += 1000;
+  if (fin.given >= GPU_GOAL) {
+    fin.phase = 'win'; fin.t = 0; P.state = 'cutscene'; P.pose = 'idle';
+    v.state = 'kiss'; v.t = 0; projs = [];
+  }
+}
+function startFinalFail() {
+  if (fin.phase === 'fail') return;
+  const v = fin.v; fin.phase = 'fail'; fin.t = 0; projs = [];
+  v.x = clamp(P.x + (P.x < W / 2 ? 1 : -1) * 70, 60, W - 60); v.y = P.y; v.z = 0; v.vx = 0;
+  v.state = 'decap'; v.t = 0; P.hp = 0; P.z = 0; P.vz = 0;
+  say(v, "TOO SLOW. I'LL TAKE YOUR HEAD INSTEAD.");
+  startDecap(v, P);
+}
+function updFinal() {
+  const v = fin.v; fin.t++;
+  if (fin.phase === 'intro') {
+    v.cd = 99999;
+    if (fin.t === 70) say(v, "SO YOU'RE THE NEW OWNER. WHAT DID YOU BRING ME?");
+    if (fin.t >= 220) {
+      fin.phase = 'fight'; fin.t = 0; v.cd = 90;
+      pop(W / 2, FB, 230, 'GIVE HER ' + GPU_GOAL + ' GPUs IN 30 SECONDS!', '#ff7ab8', 14);
+    }
+  } else if (fin.phase === 'fight') {
+    fin.timer--;
+    if (fin.timer % 60 === 0 && fin.timer <= 600 && fin.timer > 0) SFX.block();
+    // keep it winnable: if you're out of GPUs, one falls out of the server rack
+    if (--fin.dropT <= 0 && P.gpus + items.filter(i => i.kind === 'gpu').length < GPU_GOAL - fin.given) {
+      items.push({ kind:'gpu', x:rnd(80, W - 80), y:rnd(FT + 20, FB - 10) });
+      pop(W / 2, FB, 220, 'A GPU FELL OUT OF THE SERVER RACK!', '#76ff03', 10);
+      fin.dropT = 300;
+    }
+    if (fin.timer <= 0) { fin.timer = 0; startFinalFail(); }
+  } else if (fin.phase === 'win') {
+    const tx = P.x + P.face * 46 * (v.T.scale || 1);
+    v.face = -P.face;
+    if (Math.abs(v.x - tx) > 4) { v.x += Math.sign(tx - v.x) * 2.5; v.y += Math.sign(P.y - v.y) * Math.min(2, Math.abs(P.y - v.y)); v.pose = 'walk'; }
+    else {
+      v.pose = 'kiss';
+      if (!fin.kissed) { fin.kissed = true; fin.t = 0; SFX.kiss(); SFX.fanfare(); pop(P.x, P.y, 170, 'SMOOCH!', '#ff4f9a', 26); }
+      if (frame % 6 === 0) hearts((P.x + v.x) / 2, P.y, 100, 2);
+      if (fin.kissed && fin.t > 150) { mode = 'win'; modeT = 0; endKind = 'kiss'; }
+    }
   }
 }
 
@@ -356,8 +565,12 @@ function updPlayer() {
     case 'throw': p.pose = 'punch'; if (p.t >= 12) p.state = 'idle'; break;
     case 'pick':  p.pose = 'idle';  if (p.t >= 8) p.state = 'idle'; break;
     case 'hurt':  p.pose = 'hurt';  if (p.t >= 18) p.state = 'idle'; break;
+    case 'decap': if (updDecap(p)) { p.state = 'idle'; p.dc = null; p.peeing = false; } break;
+    case 'victim': break;            // frozen while Vivian works
+    case 'cutscene': p.pose = 'idle'; break;
     case 'down':
       p.pose = 'down';
+      if (p.headless) break;
       if (p.z === 0 && p.t > 55) {
         if (p.dying) {
           lives--;
@@ -402,6 +615,14 @@ function updPlayer() {
   }
   p.y = clamp(p.y, FT, FB);
   p.x = clamp(p.x, camX + 20, Math.min(camX + W - 20, S.len - 20));
+  // GPUs are auto-collected by walking over them
+  if (['idle','jump','atk','pick'].includes(p.state)) for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i];
+    if (it.kind === 'gpu' && Math.abs(it.x - p.x) < 34 && Math.abs(it.y - p.y) < 24 && p.z < 30) {
+      items.splice(i, 1); p.gpus++; SFX.pickup(); score += 100;
+      pop(p.x, p.y, 110, '+1 GPU', '#76ff03', 11);
+    }
+  }
 }
 
 function updAI(e) {
@@ -458,9 +679,25 @@ function updEnemy(e) {
     case 'getup': e.pose = 'hurt'; e.inv = 2; if (e.t >= 16) { e.state = 'idle'; e.cd = 30; } break;
     case 'ripped': e.pose = 'ripped'; break;
     case 'stagger': e.pose = 'hurt'; if (e.t % 3 === 0) spurt(e); if (e.t >= 60) { e.state = 'idle'; e.cd = 40; } break;
+    case 'flirt':
+      e.pose = 'kiss'; if (e.t % 10 === 0) hearts(e.x, e.y, 110, 1);
+      if (e.t >= 75) { e.state = 'wander'; e.t = 0; e.goal = { x:rnd(80, W - 80), y:rnd(FT, FB) }; }
+      break;
+    case 'wander': {
+      e.pose = 'walk'; const gx = e.goal.x - e.x, gy = e.goal.y - e.y;
+      e.x += Math.sign(gx) * Math.min(3.5, Math.abs(gx)); e.y += Math.sign(gy) * Math.min(2.5, Math.abs(gy));
+      e.face = gx >= 0 ? 1 : -1;
+      if ((Math.abs(gx) < 6 && Math.abs(gy) < 6) || e.t > 90) { e.state = 'idle'; e.cd = 50; }
+      break;
+    }
+    case 'kiss': break;              // driven by updFinal
+    case 'decap':
+      if (updDecap(e)) { e.state = 'idle'; e.dc = null; e.peeing = false; mode = 'over'; modeT = 0; endKind = 'vivian'; }
+      break;
     case 'dead':
       e.pose = 'down';
       if (e.armless && e.t % 4 === 0 && e.t < 60) spurt(e);
+      if (e.headless && e.t % 3 === 0 && e.t < 90) neckSpurt(e);
       if (e.z === 0 && e.t > 20) {
         if (!e.puddled) { e.puddled = true; addDecal(e.x - e.face * 40 * sc, e.y, rnd(18, 28) * sc); }
         e.fade = (e.fade ?? 1) - .012;
@@ -472,6 +709,7 @@ function updEnemy(e) {
 }
 
 function updWaves() {
+  if (fin) { updFinal(); return; }
   const w = S.waves[waveIdx];
   if (!lock && w && P.x >= w.at) { lock = true; queue = w.e.slice(); spawnT = 0; goT = 0; }
   if (!lock) return;
@@ -540,6 +778,11 @@ function updFx() {
   }
   parts = parts.filter(p => p.life > 0);
   if (parts.length > 600) parts.splice(0, parts.length - 600);
+  for (const h of heads) {
+    if (h.z > 0 || h.vz > 0) { h.vz -= GRAV; h.z += h.vz; h.x += h.vx; h.spin += .35 * Math.sign(h.vx || 1); }
+    if (h.z <= 0) { h.z = 0; h.vz = 0; h.vx = 0; h.spin = 0; }
+  }
+  for (const p of parts) if (p.float) { p.vz = .9; p.z += .6; }
   for (const p of pops) { p.life--; if (!p.bubble) p.z += .6; }
   pops = pops.filter(p => p.life > 0 && (!p.follow || p.follow.state !== 'dead'));
   shake *= .85; if (shake < .4) shake = 0;
@@ -594,6 +837,11 @@ function drawItem(kind, w) {
       R(-3, -4, 7, 4, '#d79a5a'); R(-3, -4, 7, 2, '#ff7ab8'); R(0, -3, 1, 1, '#7a4a20');
       R(-2, -4, 1, 1, '#fff'); R(2, -4, 1, 1, '#7cf'); R(1, -4, 1, 1, '#ff0');
       break;
+    case 'gpu':
+      R(-6, -5, 12, 5, '#1f1f24'); R(-6, -5, 12, 1, '#76ff03');
+      R(-5, -4, 4, 3, '#555'); R(1, -4, 4, 3, '#555'); R(-4, -3, 2, 1, '#999'); R(2, -3, 2, 1, '#999');
+      R(-5, 0, 9, 1, '#d4a020');
+      break;
     case 'memo':
       R(-3, -2, 6, 4, '#fafafa'); R(-2, -1, 4, 1, '#888'); R(-2, 1, 3, 1, '#888'); R(2, -2, 1, 1, '#c33');
       break;
@@ -644,18 +892,13 @@ function drawFighter(e) {
   if (T.lanyard) { R(-2, -24, 1, 6, '#e33'); R(2, -24, 1, 6, '#e33'); R(-1, -19, 3, 3, '#fff'); }
   R(-5, -13, 10, 1, '#111');
 
+  if (T.dress) { R(-6, -14, 12, 5, T.top); R(-6, -10, 12, 1, T.top2); R(-1, -25, 2, 3, T.skin); }
+
   // head
-  R(-3, -32, 7, 7, T.skin);
-  if (T.ceo) { R(-4, -35, 8, 3, T.hair); R(-4, -33, 2, 4, T.hair); R(-3, -35, 6, 1, '#f2f2f2'); }
-  else if (T.bald) { R(-4, -31, 2, 4, T.hair); R(-3, -33, 7, 1, T.skin); }
-  else { R(-3, -34, 7, 2, T.hair); R(-4, -33, 2, 4, T.hair); }
-  if (T.longhair) R(-5, -33, 3, 10, T.hair);
-  if (T.glasses) { R(1, -30, 4, 2, '#111'); R(2, -30, 1, 1, '#8cf'); R(-1, -30, 2, 1, '#111'); }
-  else if (pose === 'hurt' || pose === 'down' || pose === 'ripped') { R(2, -30, 1, 1, '#111'); R(4, -30, 1, 1, '#111'); }
-  else R(2, -29, 1, 1, '#111');
-  if (T.mustache) R(1, -27, 4, 1, '#eee');
-  if (pose === 'hurt' || pose === 'ripped' || pose === 'down') R(2, -27, 2, 2, '#5a1010');
-  else if (!T.mustache) R(2, -27, 2, 1, T.ceo ? '#a07050' : '#7a3a2a');
+  if (e.headless) {
+    R(-2, -27, 4, 2, T.skin); R(-2, -27, 4, 1, gore ? '#b00000' : T.top2);
+    if (gore) R(-1, -28, 2, 1, '#eadcc4');
+  } else drawHead(T, pose);
 
   // held weapon (player)
   if (e.weapon && pose !== 'down') {
@@ -689,6 +932,55 @@ function drawFighter(e) {
     }
   }
   ctx.restore();
+}
+
+function drawHead(T, pose) {
+  const hurt = pose === 'hurt' || pose === 'down' || pose === 'ripped' || pose === 'severed';
+  R(-3, -32, 7, 7, T.skin);
+  if (T.ceo) { R(-4, -35, 8, 3, T.hair); R(-4, -33, 2, 4, T.hair); R(-3, -35, 6, 1, '#f2f2f2'); }
+  else if (T.bald) { R(-4, -31, 2, 4, T.hair); R(-3, -33, 7, 1, T.skin); }
+  else { R(-3, -34, 7, 2, T.hair); R(-4, -33, 2, 4, T.hair); }
+  if (T.longhair && pose !== 'severed') R(-5, -33, 3, 10, T.hair);
+  if (T.glasses) { R(1, -30, 4, 2, '#111'); R(2, -30, 1, 1, '#8cf'); R(-1, -30, 2, 1, '#111'); }
+  else if (hurt) { R(2, -30, 1, 1, '#111'); R(4, -30, 1, 1, '#111'); }
+  else if (pose === 'kiss') R(2, -29, 2, 1, '#111');
+  else R(2, -29, 1, 1, '#111');
+  if (T.mustache) R(1, -27, 4, 1, '#eee');
+  if (T.lips) { R(2, -27, 2, 1, '#e0104a'); if (pose === 'kiss') R(4, -27, 1, 1, '#e0104a'); }
+  else if (hurt) R(2, -27, 2, 2, '#5a1010');
+  else if (!T.mustache) R(2, -27, 2, 1, T.ceo ? '#a07050' : '#7a3a2a');
+}
+// a severed head lying on the floor, skull open, brain exposed
+function drawSevered(h) {
+  ctx.save(); ctx.translate(Math.round(h.x - camX), Math.round(h.y - h.z)); ctx.scale(h.sc, h.sc);
+  if (h.z > 0) ctx.rotate(h.spin);
+  ctx.translate(0, 26 * PX);
+  drawHead(h.T, 'severed');
+  if (gore) {
+    R(-3, -34, 7, 3, '#f59ab0'); R(-2, -35, 5, 1, '#f59ab0');
+    R(-2, -34, 1, 1, '#c25576'); R(0, -33, 1, 1, '#c25576'); R(2, -34, 1, 1, '#c25576'); R(3, -33, 1, 1, '#c25576');
+    R(-3, -31, 7, 1, '#eadcc4');
+    R(-2, -25, 5, 1, '#a00000');
+  }
+  ctx.restore();
+}
+function drawPee(a) {
+  const h = a.dc && a.dc.head; if (!h) return;
+  const sc = a.T.scale || 1;
+  const sx = a.x - camX + a.face * 4 * PX * sc, sy = a.y - 13 * PX * sc;
+  const hx = h.x - camX, hy = h.y - 32 * PX * h.sc + 26 * PX * h.sc - 4;
+  const lift = 40 + Math.abs(hx - sx) * .25;
+  ctx.fillStyle = '#ffe23a';
+  for (let i = 0; i < 24; i++) {
+    const s = ((i / 24) + (frame % 6) / 144);
+    const x = sx + (hx - sx) * s + rnd(-1, 1), y = sy + (hy - sy) * s - Math.sin(Math.PI * s) * lift;
+    ctx.fillRect(x - 2, y - 2, 4, 4);
+  }
+  for (let i = 0; i < 2; i++) parts.push({ x:h.x + rnd(-6, 6), y:h.y, z:8, vx:rnd(-1.5, 1.5), vy:0, vz:rnd(1, 3), life:20, c:'#ffe23a', s:2 });
+  // censor bar
+  const bw = 78 * sc * .8, bh = 16;
+  ctx.fillStyle = '#000'; ctx.fillRect(sx - bw / 2, sy - bh / 2, bw, bh);
+  ctx.font = `7px ${FONT}`; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText('CENSORED', sx, sy + 4);
 }
 
 function drawShadow(x, y, z, sc) {
@@ -770,7 +1062,7 @@ function drawBG() {
   }
   // end-of-floor elevator
   const ex = S.len - 150 - camX;
-  if (ex < W + 20) {
+  if (ex < W + 20 && !S.final) {
     ctx.fillStyle = '#999'; ctx.fillRect(ex, 110, 120, 196);
     ctx.fillStyle = '#bbb'; ctx.fillRect(ex + 6, 116, 52, 190); ctx.fillRect(ex + 62, 116, 52, 190);
     ctx.fillStyle = '#e33'; ctx.fillRect(ex + 52, 92, 16, 12);
@@ -783,8 +1075,8 @@ function drawScene() {
   if (shake > 0) ctx.translate(rnd(-shake, shake), rnd(-shake, shake) * .6);
   drawBG();
   // decals
-  ctx.fillStyle = 'rgba(120,0,0,.75)';
-  for (const d of decals) { ctx.beginPath(); ctx.ellipse(d.x - camX, d.y, d.r, d.r * .35, 0, 0, Math.PI * 2); ctx.fill(); }
+  for (const d of decals) { ctx.fillStyle = d.c; ctx.beginPath(); ctx.ellipse(d.x - camX, d.y, d.r, d.r * .35, 0, 0, Math.PI * 2); ctx.fill(); }
+  for (const h of heads) { if (h.z <= 0) drawSevered(h); }
   // floor items
   for (const it of items) {
     const x = it.x - camX; if (x < -60 || x > W + 60) continue;
@@ -792,7 +1084,8 @@ function drawScene() {
     ctx.save(); ctx.translate(x, it.y - 2);
     if (it.kind === 'arm' || it.kind === 'keyboard') { ctx.rotate(Math.PI / 2); ctx.translate(-8, -20); }
     drawItem(it.kind, it); ctx.restore();
-    if (P && Math.abs(it.x - P.x) < 46 && Math.abs(it.y - P.y) < 30 && !P.weapon && frame % 40 < 28) txt('L', x, it.y - 52, 10, '#ffd84a');
+    if (it.kind === 'gpu') { if (frame % 40 < 20) { ctx.fillStyle = 'rgba(118,255,3,.25)'; ctx.fillRect(x - 22, it.y - 22, 44, 24); } }
+    else if (P && Math.abs(it.x - P.x) < 46 && Math.abs(it.y - P.y) < 30 && !P.weapon && frame % 40 < 28) txt('L', x, it.y - 52, 10, '#ffd84a');
   }
   // entities
   const ents = [...enemies, ...projs];
@@ -803,12 +1096,22 @@ function drawScene() {
     if (e.T) drawFighter(e);
     else { ctx.save(); ctx.translate(e.x - camX, e.y - e.z); ctx.rotate(e.spin); ctx.translate(0, e.kind === 'memo' ? 0 : 20); drawItem(e.kind, e.w || {}); ctx.restore(); }
   }
+  for (const h of heads) if (h.z > 0) drawSevered(h);
+  // pee streams + censor bars
+  for (const a of [P, ...enemies]) if (a && a.peeing) drawPee(a);
   // particles
-  for (const p of parts) { ctx.fillStyle = p.c; ctx.fillRect(p.x - camX, p.y - p.z, p.s, p.s); }
-  // rip prompts
-  if (P && mode === 'play' && !P.weapon) for (const e of enemies) {
-    if (rippable(e) && frame % 30 < 20) txt('L: RIP!', e.x - camX, e.y - 112 * (e.T.scale || 1), 10, '#ff3b3b');
+  for (const p of parts) {
+    ctx.fillStyle = p.c;
+    if (p.heart) { const x = p.x - camX, y = p.y - p.z; ctx.fillRect(x - 3, y - 2, 3, 3); ctx.fillRect(x + 1, y - 2, 3, 3); ctx.fillRect(x - 2, y, 5, 2); ctx.fillRect(x - 1, y + 2, 3, 2); }
+    else ctx.fillRect(p.x - camX, p.y - p.z, p.s, p.s);
   }
+  // finisher prompts
+  if (P && mode === 'play' && !P.weapon) for (const e of enemies) {
+    const f = finisher(e);
+    if (f && frame % 30 < 20) txt(f === 'rip' ? 'L: RIP!' : 'L: DECAPITATE!', e.x - camX, e.y - 112 * (e.T.scale || 1), 10, '#ff3b3b');
+  }
+  if (fin && fin.phase === 'fight' && P.gpus > 0 && Math.abs(fin.v.x - P.x) < 80 && Math.abs(fin.v.y - P.y) < 30 && frame % 30 < 20)
+    txt('L: GIVE GPU', fin.v.x - camX, fin.v.y - 150, 10, '#ff7ab8');
   // popups / bubbles
   for (const p of pops) {
     if (p.bubble) {
@@ -838,6 +1141,7 @@ function drawHUD() {
   ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(10, 10, 360, 82);
   txt('JANSEN HU', 22, 32, 12, '#fff', 'left');
   txt('CEO', 150, 32, 8, '#aaa', 'left');
+  txt('GPU x' + (P.gpus || 0), 200, 32, 9, '#76ff03', 'left');
   bar(22, 42, 240, 12, P.hp / P.maxHp, P.hp < 30 && frame % 20 < 10 ? '#fff' : '#e33', '#400');
   txt('x' + Math.max(0, lives), 276, 54, 12, '#ffd84a', 'left');
   txt('HYPE', 22, 80, 8, '#76ff03', 'left');
@@ -847,8 +1151,20 @@ function drawHUD() {
   txt(S.name + ' - ' + S.sub, W - 18, 54, 8, '#bbb', 'right');
   if (P.weapon) txt(WNAME[P.weapon.kind] + (P.weapon.uses > 1 ? ' x' + P.weapon.uses : ''), W - 18, 78, 9, '#ffd84a', 'right');
   if (!gore) txt('GORE OFF', W - 18, 96, 8, '#7cf', 'right');
-  const b = enemies.find(e => e.T.boss && e.state !== 'dead' && e.state !== 'enter');
-  if (b) {
+  const b = enemies.find(e => e.T.boss && !e.T.untouchable && e.state !== 'dead' && e.state !== 'enter');
+  if (fin) {
+    ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(W / 2 - 270, H - 58, 540, 48);
+    txt('VIVIAN VOLTAGE - CHIEF ACQUISITIONS OFFICER', W / 2, H - 38, 9, '#ff7ab8');
+    for (let i = 0; i < GPU_GOAL; i++) {
+      const x = W / 2 - 60 + i * 26, y = H - 26;
+      ctx.fillStyle = i < fin.given ? '#ff4f9a' : '#442233';
+      ctx.fillRect(x, y, 7, 7); ctx.fillRect(x + 9, y, 7, 7); ctx.fillRect(x + 2, y + 6, 12, 5); ctx.fillRect(x + 5, y + 11, 6, 3);
+    }
+    if (fin.phase === 'fight') {
+      const s = Math.ceil(fin.timer / 60);
+      txt(String(s), W / 2, 130, 36, s <= 10 && frame % 20 < 10 ? '#ff3b3b' : '#fff');
+    }
+  } else if (b) {
     ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(W / 2 - 270, H - 54, 540, 44);
     txt(b.T.name, W / 2, H - 34, 11, '#fff');
     bar(W / 2 - 255, H - 26, 510, 10, b.hp / b.maxHp, '#c040ff', '#203');
@@ -886,9 +1202,9 @@ function drawTitle() {
     ['L', 'GRAB: RIP ARM / PICK UP / THROW'], ['I', 'KEYNOTE (WHEN HYPE FULL)'], ['P', 'PAUSE'],
   ];
   L.forEach(([k, v], i) => { txt(k, 490, 252 + i * 26, 9, '#ffd84a', 'left'); txt(v, 640, 252 + i * 26, 9, '#fff', 'left'); });
-  txt('WEAKEN A COWORKER, THEN PRESS L.', 700, 440, 8, '#ff7a7a');
+  txt('WEAKEN A COWORKER, THEN PRESS L. TWICE.', 700, 440, 8, '#ff7a7a');
   txt('G: GORE ' + (gore ? 'ON' : 'OFF (CONFETTI)'), W / 2, 486, 10, gore ? '#ff3b3b' : '#7cf');
-  if (frame % 60 < 40) txt('PRESS ENTER', W / 2, 524, 16, '#fff');
+  if (frame % 60 < 40) txt(IS_TOUCH ? 'TAP START' : 'PRESS ENTER', W / 2, 524, 16, '#fff');
 }
 
 function drawEnd(title, sub, col) {
@@ -900,11 +1216,43 @@ function drawEnd(title, sub, col) {
 }
 
 /* ---------------- main loop ---------------- */
+/* demo mode: a simple bot drives the virtual controller */
+function demoBot() {
+  keys.left = keys.right = keys.up = keys.down = false;
+  if (mode !== 'play') return;
+  P.hp = Math.max(P.hp, 50);
+  if (demoCd > 0) { demoCd--; return; }
+  const live = enemies.filter(e => e.state !== 'dead' && e.state !== 'enter' && !e.T.untouchable)
+                      .sort((a, b) => Math.abs(a.x - P.x) - Math.abs(b.x - P.x));
+  const e = live[0];
+  if (!e) { keys.right = true; return; }
+  const dx = e.x - P.x, dy = e.y - P.y;
+  if (Math.abs(dx) > 55) keys[dx > 0 ? 'right' : 'left'] = true;
+  if (Math.abs(dy) > 8) keys[dy > 0 ? 'down' : 'up'] = true;
+  if (Math.abs(dx) <= 62 && Math.abs(dy) <= 10) {
+    if ((P.face > 0) !== (dx > 0)) keys[dx > 0 ? 'right' : 'left'] = true;
+    if (P.hype >= 100) pressed.special = true;
+    else if (finisher(e) && !P.weapon) pressed.grab = true;
+    else pressed[Math.random() < .25 ? 'kick' : 'punch'] = true;
+    demoCd = 8;
+  }
+}
+function endDemo() { demo = false; mode = 'title'; titleIdle = 0; for (const k in keys) keys[k] = false; }
+
 function step() {
   frame++;
+  if (demo) {
+    if (anyInput) { anyInput = false; endDemo(); for (const k in pressed) delete pressed[k]; return; }
+    demoT++;
+    if (demoT > 60 * 75 || mode === 'over' || mode === 'win') { endDemo(); return; }
+    demoBot();
+  }
+  anyInput = false;
   if (pressed.gore) { gore = !gore; if (mode === 'play') pop(P.x, P.y, 140, gore ? 'GORE ON' : 'GORE OFF', '#7cf', 12); }
   if (mode === 'title') {
-    if (pressed.start || pressed.punch) startGame();
+    if (pressed.start || pressed.punch) { startGame(); titleIdle = 0; }
+    else if (Object.keys(pressed).length || Object.values(keys).some(Boolean)) titleIdle = 0;
+    else if (++titleIdle > 300) { titleIdle = 0; demo = true; demoT = 0; demoCd = 0; startGame(); }
   } else if (mode === 'play') {
     if (pressed.pause) paused = !paused;
     if (!paused) {
@@ -937,8 +1285,15 @@ function draw() {
     txt('FLOOR CLEARED!', W / 2, 235, 28, '#ffd84a');
     txt(stageIdx + 1 < STAGES.length ? 'TAKING THE ELEVATOR UP...' : 'THE BOARD HAS BEEN DISSOLVED.', W / 2, 272, 11, '#fff');
   }
-  if (mode === 'over') drawEnd("YOU'RE FIRED.", 'THE BOARD ACCEPTS YOUR RESIGNATION.', '#ff3b3b');
-  if (mode === 'win') drawEnd('HOSTILE TAKEOVER', 'COMPLETE. NEUROFORGE IS NOW A COMPANY OF ONE.', '#76ff03');
+  if (mode === 'over' && modeT > 20) {
+    if (endKind === 'vivian') drawEnd('ACQUIRED.', 'VIVIAN VOLTAGE NOW OWNS NEUROFORGE. AND YOUR HEAD.', '#ff4f9a');
+    else drawEnd("YOU'RE FIRED.", 'THE BOARD ACCEPTS YOUR RESIGNATION.', '#ff3b3b');
+  }
+  if (mode === 'win') drawEnd('MERGER COMPLETE', 'VIVIAN VOLTAGE ACCEPTS YOUR PROPOSAL. NEUROFORGE IS YOURS.', '#ff4f9a');
+  if (demo) {
+    ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(0, H - 92, W, 34);
+    if (frame % 60 < 40) txt('DEMO - PRESS ANY BUTTON', W / 2, H - 68, 14, '#ffd84a');
+  }
 }
 
 let last = performance.now(), acc = 0;
