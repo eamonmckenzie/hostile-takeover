@@ -47,7 +47,7 @@
 'use strict';
 /* =========================================================
    HOSTILE TAKEOVER — a belt-scrolling office brawler
-   Starring JANSEN HU, leather-jacketed CEO of NeuroForge.
+   Starring JENSEN HUANG, leather-jacketed CEO of NeuroForge.
    (Fictional characters. Any resemblance is parody.)
    ========================================================= */
 const cv = document.getElementById('c'), ctx = cv.getContext('2d');
@@ -171,15 +171,15 @@ const TYPES = {
   counsel: { name:'GENERAL COUNSEL', hp:320, spd:1.7, dmg:13, reach:62, skin:'#b88060', hair:'#8a8a8a', top:'#222222', top2:'#111111', pants:'#222222', shoe:'#000', tie:'#a00000', briefcase:true, block:.25, boss:true, scale:1.4, score:3000 },
   chairman:{ name:'CHAIRMAN OF THE BOARD', hp:420, spd:1.8, dmg:15, reach:66, skin:'#e8c0a0', hair:'#f4f4f4', top:'#5a5a62', top2:'#44444a', pants:'#3a3a40', shoe:'#000', tie:'#1a6a3a', bald:true, mustache:true, boss:true, scale:1.5, score:5000 }
 };
-TYPES.vivian = { name:'VIVIAN VOLTAGE', hp:999, spd:2.6, dmg:9, reach:62, skin:'#f0c8a8', hair:'#1a1010', top:'#c0103a', top2:'#900a2a',
+TYPES.vivian = { name:'ALICE HUANG', hp:999, spd:2.6, dmg:9, reach:62, skin:'#f0c8a8', hair:'#1a1010', top:'#c0103a', top2:'#900a2a',
                  pants:'#f0c8a8', shoe:'#c0103a', dress:true, longhair:true, lips:true, boss:true, untouchable:true, scale:.94, score:0 };
 const FLIRT_MOVES = ['blowkiss', 'wink', 'twirl', 'hairflip', 'beckon'];
-const TEASES = ['CATCH, HANDSOME!', 'COME AND GET ME~', 'TICK TOCK, JANSEN~', 'I LIKE A MAN WITH HARDWARE.', 'DON\'T KEEP ME WAITING~'];
+const TEASES = ['CATCH, HANDSOME!', 'COME AND GET ME~', 'TICK TOCK, JENSEN~', 'I LIKE A MAN WITH HARDWARE.', 'DON\'T KEEP ME WAITING~'];
 const FLIRTS = ['OOH, A GPU? FOR ME?', 'YOU REALLY KNOW HOW TO SCALE.', 'MMM, SO MANY TENSOR CORES...',
                 "IS IT HOT IN HERE, OR IS IT THE THERMALS?", 'COME HERE, BIG SPENDER.'];
 const TAUNT = {
   intern:'IS THIS PAID?', manager:"LET'S CIRCLE BACK!", lawyer:'OBJECTION!', hr:'THIS GOES IN YOUR FILE!',
-  vp:"LET'S SYNERGIZE, JANSEN!", counsel:'I ADVISE AGAINST THIS.', chairman:'THE BOARD HAS VOTED, JANSEN.'
+  vp:"LET'S SYNERGIZE, JENSEN!", counsel:'I ADVISE AGAINST THIS.', chairman:'THE BOARD HAS VOTED, JENSEN.'
 };
 const QUIPS = ["YOU'RE FIRED!", 'DOWNSIZED!', 'RESTRUCTURED!', 'LET GO!', 'OFFBOARDED!', 'PIP FAILED!', 'RIGHT-SIZED!', "REORG'D!", 'PTO: PERMANENT', 'ROLE ELIMINATED!', 'SEE HR... OH WAIT'];
 const WUSES = { arm:8, keyboard:6, mug:1, chair:1 };
@@ -1500,7 +1500,7 @@ function drawScene() {
 function drawHUD() {
   if (fin && fin.kissed) return;      // keep the romance cover clean
   ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(10, 10, 360, 82);
-  txt('JANSEN HU', 22, 32, 12, '#fff', 'left');
+  txt('JENSEN HUANG', 22, 32, 12, '#fff', 'left');
   txt('CEO', 150, 32, 8, '#aaa', 'left');
   txt('GPU x' + (P.gpus || 0), 200, 32, 9, '#76ff03', 'left');
   bar(22, 42, 240, 12, P.hp / P.maxHp, P.hp < 30 && frame % 20 < 10 ? '#fff' : '#e33', '#400');
@@ -1515,7 +1515,7 @@ function drawHUD() {
   const b = enemies.find(e => e.T.boss && !e.T.untouchable && e.state !== 'dead' && e.state !== 'enter');
   if (fin) {
     ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(W / 2 - 270, H - 58, 540, 48);
-    txt('VIVIAN VOLTAGE - CHIEF ACQUISITIONS OFFICER', W / 2, H - 38, 9, '#ff7ab8');
+    txt('ALICE HUANG- CHIEF ACQUISITIONS OFFICER', W / 2, H - 38, 9, '#ff7ab8');
     for (let i = 0; i < GPU_GOAL; i++) {
       const x = W / 2 - 60 + i * 26, y = H - 26;
       ctx.fillStyle = i < fin.given ? '#ff4f9a' : '#442233';
@@ -1547,7 +1547,7 @@ function drawTitle() {
   ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(0, 0, W, H);
   txt('HOSTILE', W / 2, 92, 48, '#ffd84a');
   txt('TAKEOVER', W / 2, 150, 48, '#ff3b3b');
-  txt('STARRING JANSEN HU, CEO OF NEUROFORGE', W / 2, 186, 10, '#76ff03');
+  txt('STARRING JENSEN HUANG, CEO OF NVIDIA', W / 2, 186, 10, '#76ff03');
   // showcase
   const demo = { T:TYPES.player, x:camX + 230, y:400, z:0, face:1, pose:frame % 120 < 60 ? 'idle' : 'swing', anim:frame, t:20,
                  atk:ATK.arm, weapon:{ kind:'arm', top:TYPES.manager.top, top2:TYPES.manager.top2, skin:TYPES.manager.skin } };
@@ -1661,10 +1661,10 @@ function draw() {
     if (modeT > 100) txt('A TOAST: TO THE GPUs, AND TO ME!', W / 2, 270, 11, '#fff');
   }
   if (mode === 'over' && modeT > 20) {
-    if (endKind === 'vivian') drawEnd('ACQUIRED.', 'VIVIAN VOLTAGE NOW OWNS NEUROFORGE. AND YOUR HEAD.', '#ff4f9a');
+    if (endKind === 'vivian') drawEnd('ACQUIRED.', 'ALICE HUANG NOW OWNS NVIDIA. AND YOUR HEAD.', '#ff4f9a');
     else drawEnd("YOU'RE FIRED.", 'THE BOARD ACCEPTS YOUR RESIGNATION.', '#ff3b3b');
   }
-  if (mode === 'win') drawEnd('MERGER COMPLETE', 'VIVIAN VOLTAGE ACCEPTS YOUR PROPOSAL. NEUROFORGE IS YOURS.', '#ff4f9a');
+  if (mode === 'win') drawEnd('MERGER COMPLETE', 'ALICE HUANG ACCEPTS YOUR PROPOSAL. NVIDIA IS YOURS.', '#ff4f9a');
   if (demo) {
     ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(0, H - 92, W, 34);
     if (frame % 60 < 40) txt('DEMO - PRESS ANY BUTTON', W / 2, H - 68, 14, '#ffd84a');
