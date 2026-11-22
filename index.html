@@ -1547,7 +1547,7 @@ function drawTitle() {
   ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(0, 0, W, H);
   txt('HOSTILE', W / 2, 92, 48, '#ffd84a');
   txt('TAKEOVER', W / 2, 150, 48, '#ff3b3b');
-  txt('STARRING JENSEN HUANG, CEO OF NVIDIA', W / 2, 186, 10, '#76ff03');
+  txt('STARRING JENSEN HUANG, CEO OF CLMIDIA', W / 2, 186, 10, '#76ff03');
   // showcase
   const demo = { T:TYPES.player, x:camX + 230, y:400, z:0, face:1, pose:frame % 120 < 60 ? 'idle' : 'swing', anim:frame, t:20,
                  atk:ATK.arm, weapon:{ kind:'arm', top:TYPES.manager.top, top2:TYPES.manager.top2, skin:TYPES.manager.skin } };
@@ -1661,10 +1661,10 @@ function draw() {
     if (modeT > 100) txt('A TOAST: TO THE GPUs, AND TO ME!', W / 2, 270, 11, '#fff');
   }
   if (mode === 'over' && modeT > 20) {
-    if (endKind === 'vivian') drawEnd('ACQUIRED.', 'ALICE HUANG NOW OWNS NVIDIA. AND YOUR HEAD.', '#ff4f9a');
+    if (endKind === 'vivian') drawEnd('ACQUIRED.', 'ALICE HUANG NOW OWNS CLMIDIA. AND YOUR HEAD.', '#ff4f9a');
     else drawEnd("YOU'RE FIRED.", 'THE BOARD ACCEPTS YOUR RESIGNATION.', '#ff3b3b');
   }
-  if (mode === 'win') drawEnd('MERGER COMPLETE', 'ALICE HUANG ACCEPTS YOUR PROPOSAL. NVIDIA IS YOURS.', '#ff4f9a');
+  if (mode === 'win') drawEnd('MERGER COMPLETE', 'ALICE HUANG ACCEPTS YOUR PROPOSAL. CLMIDIA IS YOURS.', '#ff4f9a');
   if (demo) {
     ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(0, H - 92, W, 34);
     if (frame % 60 < 40) txt('DEMO - PRESS ANY BUTTON', W / 2, H - 68, 14, '#ffd84a');
