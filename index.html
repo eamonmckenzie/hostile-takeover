@@ -32,7 +32,7 @@
 <div id="touch">
   <div id="stick"><div id="knob"></div></div>
   <div id="btns">
-    <button class="b-special" data-a="special">KEY<br>NOTE</button>
+    <button class="b-special" data-a="special">ROAST</button>
     <button class="b-grab" data-a="grab">GRAB</button>
     <button data-a="jump">JUMP</button>
     <span></span>
@@ -152,6 +152,10 @@ const SFX = {
   go: () => { tone(.1, 660, 660, .1); tone(.1, 880, 880, .1, 'square', .12); },
   special: () => { [220, 277, 330, 440].forEach((f, i) => tone(.7, f, f * 2, .1, 'sawtooth', i * .06)); noise(.9, 4000, .3, 'lowpass', 200); },
   fanfare: () => { [523, 659, 784, 1046].forEach((f, i) => tone(.25, f, f, .1, 'square', i * .12)); },
+  boo: () => { [392, 370, 349, 294].forEach((f, i) => tone(i === 3 ? .7 : .28, f, i === 3 ? f * .9 : f, .12, 'sawtooth', i * .3)); },
+  sob: () => { tone(.25, 520, 380, .05, 'triangle'); tone(.3, 480, 300, .05, 'triangle', .28); },
+  splat: () => { noise(.5, 400, .7, 'lowpass', 60); tone(.3, 80, 30, .35, 'sine'); },
+  clink: () => { tone(.4, 2600, 2500, .08, 'sine'); tone(.5, 3900, 3800, .05, 'sine', .02); },
   kiss: () => { tone(.15, 900, 1800, .1, 'sine'); tone(.2, 1400, 700, .08, 'sine', .15); },
   pee: () => noise(.12, 5000, .05, 'highpass')
 };
@@ -168,7 +172,9 @@ const TYPES = {
   chairman:{ name:'CHAIRMAN OF THE BOARD', hp:420, spd:1.8, dmg:15, reach:66, skin:'#e8c0a0', hair:'#f4f4f4', top:'#5a5a62', top2:'#44444a', pants:'#3a3a40', shoe:'#000', tie:'#1a6a3a', bald:true, mustache:true, boss:true, scale:1.5, score:5000 }
 };
 TYPES.vivian = { name:'VIVIAN VOLTAGE', hp:999, spd:2.6, dmg:9, reach:62, skin:'#f0c8a8', hair:'#1a1010', top:'#c0103a', top2:'#900a2a',
-                 pants:'#f0c8a8', shoe:'#c0103a', dress:true, longhair:true, lips:true, boss:true, untouchable:true, scale:1.3, score:0 };
+                 pants:'#f0c8a8', shoe:'#c0103a', dress:true, longhair:true, lips:true, boss:true, untouchable:true, scale:.94, score:0 };
+const FLIRT_MOVES = ['blowkiss', 'wink', 'twirl', 'hairflip', 'beckon'];
+const TEASES = ['CATCH, HANDSOME!', 'COME AND GET ME~', 'TICK TOCK, JANSEN~', 'I LIKE A MAN WITH HARDWARE.', 'DON\'T KEEP ME WAITING~'];
 const FLIRTS = ['OOH, A GPU? FOR ME?', 'YOU REALLY KNOW HOW TO SCALE.', 'MMM, SO MANY TENSOR CORES...',
                 "IS IT HOT IN HERE, OR IS IT THE THERMALS?", 'COME HERE, BIG SPENDER.'];
 const TAUNT = {
@@ -231,6 +237,7 @@ const GPU_GOAL = 5, FINAL_TIME = 30 * 60;
 let mode = 'title', S = STAGES[0], P = null, stageIdx = 0, camX = 0, lock = false, waveIdx = 0;
 let queue = [], spawnT = 0, enemies = [], parts = [], pops = [], projs = [], items = [], decals = [];
 let shake = 0, hitstop = 0, flashA = 0, frame = 0, score = 0, lives = 2, banner = 0, goT = 0, modeT = 0, paused = false;
+let splats = [], clearGpus = 0;
 let heads = [], fin = null, demo = false, demoT = 0, demoCd = 0, titleIdle = 0, anyInput = false, endKind = '';
 const IS_TOUCH = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 
@@ -241,7 +248,7 @@ function newPlayer() {
 function startGame() { score = 0; lives = 2; P = newPlayer(); P.gpus = 0; endKind = ''; loadStage(0); }
 function loadStage(i) {
   stageIdx = i; S = STAGES[i]; camX = 0; lock = false; waveIdx = 0; queue = [];
-  enemies = []; parts = []; pops = []; projs = []; decals = []; heads = []; fin = null;
+  enemies = []; parts = []; pops = []; projs = []; decals = []; heads = []; splats = []; fin = null; roastT = 0;
   items = S.items.map(([x, k]) => ({ kind:k, x, y:rnd(FT + 25, FB - 15), uses:WUSES[k] }));
   Object.assign(P, { x:120, y:430, z:0, vx:0, vz:0, face:1, state:'idle', t:0, weapon:null, atk:null, inv:60, dc:null, peeing:false, headless:false });
   banner = 200; goT = 0; mode = 'play';
@@ -260,22 +267,62 @@ function makeEnemy(type, side) {
 
 /* ---------------- fx helpers ---------------- */
 function bloodCol() { return gore ? pick(['#c00000','#a00000','#e01818','#7a0000']) : pick(['#ff4fa3','#4fd1ff','#ffe14f','#7dff6a','#b58cff']); }
+const BLOOD = 2.2;   // global gore multiplier
 function bleed(x, y, z, dir, n) {
+  n = Math.round(n * BLOOD);
   for (let i = 0; i < n; i++)
-    parts.push({ x, y, z, vx:dir * rnd(1, 5) + rnd(-1.5, 1.5), vy:rnd(-1, 1), vz:rnd(1, 6.5), life:rnd(45, 90), c:bloodCol(), s:(rnd(2, 5)) | 0 });
+    parts.push({ x, y, z, vx:dir * rnd(1, 6.5) + rnd(-2, 2), vy:rnd(-1.4, 1.4), vz:rnd(1, 8), life:rnd(50, 100), c:bloodCol(), s:(rnd(2, 6)) | 0 });
+  if (n >= 30) wallSplat(x + dir * rnd(10, 60), n);
+}
+// big blood splatters (with drips) on the back wall
+function wallSplat(x, n) {
+  if (!gore) return;
+  const k = Math.min(4, 1 + (n / 40) | 0);
+  for (let i = 0; i < k; i++) {
+    const s = { x:x + rnd(-50, 50), y:rnd(150, FT - 60), r:rnd(8, 22), blobs:[], drips:[] };
+    for (let b = 0; b < 7; b++) s.blobs.push([rnd(-1.6, 1.6) * s.r, rnd(-1, 1) * s.r * .7, rnd(.2, .55) * s.r]);
+    for (let d = 0; d < 4; d++) s.drips.push([rnd(-1, 1) * s.r, 0, rnd(.25, .6), 2 + (Math.random() * 3 | 0)]);
+    splats.push(s); if (splats.length > 60) splats.shift();
+  }
+}
+// radial blood explosion (heart stomp)
+function bloodBurst(x, y, n) {
+  n = Math.round(n * BLOOD);
+  for (let i = 0; i < n; i++) {
+    const a = rnd(0, Math.PI * 2), sp = rnd(2, 10);
+    parts.push({ x, y, z:2, vx:Math.cos(a) * sp, vy:Math.sin(a) * sp * .35, vz:rnd(3, 13), life:rnd(60, 120), c:bloodCol(), s:(rnd(2, 7)) | 0 });
+  }
+  for (let i = 0; i < 10; i++) addDecal(x + rnd(-70, 70), clamp(y + rnd(-25, 25), FT - 20, H - 4), rnd(6, 22));
+  wallSplat(x - 50, 120); wallSplat(x + 50, 120);
 }
 function shoulder(e) { const sc = e.T.scale || 1; return { x: e.x + e.face * 3 * PX * sc, z: 22 * PX * sc }; }
 function spurt(e) {
   const s = shoulder(e);
-  for (let i = 0; i < 3; i++)
-    parts.push({ x:s.x, y:e.y + 1, z:s.z, vx:e.face * rnd(1, 4), vy:rnd(-.5, .5), vz:rnd(3, 7.5), life:70, c:bloodCol(), s:3 });
+  for (let i = 0; i < 6; i++)
+    parts.push({ x:s.x, y:e.y + 1, z:s.z, vx:e.face * rnd(1, 5), vy:rnd(-.6, .6), vz:rnd(3, 9), life:75, c:bloodCol(), s:3 + (Math.random() * 2 | 0) });
 }
-function addDecal(x, y, r, c) { if (!gore) return; decals.push({ x, y, r, c:c || 'rgba(120,0,0,.75)' }); if (decals.length > 160) decals.shift(); }
+function addDecal(x, y, r, c) { if (!gore) return; decals.push({ x, y, r, c:c || pick(['rgba(120,0,0,.8)','rgba(150,0,0,.75)','rgba(95,0,0,.85)']) }); if (decals.length > 320) decals.shift(); }
 function neckSpurt(e) {
   const sc = e.T.scale || 1, lying = e.state === 'dead' || e.state === 'down';
   const nx = lying ? e.x - e.face * 28 * PX * sc * .9 : e.x, nz = lying ? 6 : 26 * PX * sc;
+  for (let i = 0; i < 5; i++)
+    parts.push({ x:nx, y:e.y + 1, z:nz, vx:(lying ? -e.face * rnd(1, 5) : rnd(-2, 2)), vy:rnd(-.6, .6), vz:rnd(4, 10), life:75, c:bloodCol(), s:3 + (Math.random() * 2 | 0) });
+}
+function chestSpurt(e) {
+  const sc = e.T.scale || 1, lying = e.state === 'dead';
+  const x = lying ? e.x - e.face * 18 * PX * sc * .9 : e.x + e.face * 3 * PX * sc, z = lying ? 8 : 19 * PX * sc;
+  for (let i = 0; i < 4; i++)
+    parts.push({ x, y:e.y + 1, z, vx:(lying ? rnd(-2, 2) : e.face * rnd(2, 6)), vy:rnd(-.6, .6), vz:rnd(2, lying ? 9 : 6), life:75, c:bloodCol(), s:3 + (Math.random() * 2 | 0) });
+}
+// Vivian blows a kiss: a heart floats over and makes Jansen blush
+function blowKiss(e) {
+  SFX.kiss();
+  parts.push({ x:e.x + e.face * 14, y:e.y, z:85 * (e.T.scale || 1), vx:0, vy:0, vz:0, life:240, c:'#ff2f7a', s:4, heart:true, homing:true, big:true });
+}
+function tears(e) {
+  const sc = e.T.scale || 1;
   for (let i = 0; i < 2; i++)
-    parts.push({ x:nx, y:e.y + 1, z:nz, vx:(lying ? -e.face * rnd(1, 4) : rnd(-1.5, 1.5)), vy:rnd(-.5, .5), vz:rnd(4, 8), life:70, c:bloodCol(), s:3 });
+    parts.push({ x:e.x + e.face * rnd(3, 6) * sc + rnd(-3, 3), y:e.y + 1, z:(29 - (e.pose === 'cry' ? 2 : 0)) * PX * sc, vx:rnd(-2.2, 2.2), vy:0, vz:rnd(1.5, 4), life:40, c:pick(['#7cd4ff','#4aa8ff','#bfe9ff']), s:3, tear:true });
 }
 function hearts(x, y, z, n) {
   for (let i = 0; i < n; i++) parts.push({ x:x + rnd(-20, 20), y, z:z + rnd(-10, 10), vx:rnd(-1, 1), vy:0, vz:rnd(1, 3), life:rnd(50, 80), c:'#ff4f9a', s:4, heart:true, float:true });
@@ -308,10 +355,10 @@ function updDecap(a) {
     bleed(v.x, v.y, 26 * PX * (v.T.scale || 1), a.face, 30);
     pop(v.x, v.y, 130, 'DECAPITATED!', '#ff3030', 20);
     if (v === P) { P.state = 'down'; P.t = 0; P.vz = 3; P.vx = a.face * 1.5; P.dying = false; }
-    else killEnemy(v, a.face, { kb:-1.4, decap:true });
+    else { killEnemy(v, a.face, { kb:-1.4, decap:true }); scareAll(300); }
   }
   if (t > 20 && t < 42) a.pose = 'idle';
-  const peeEnd = gore ? 135 : 45;
+  const peeEnd = gore ? 42 + 180 : 45;
   a.peeing = gore && t >= 42 && t < peeEnd;
   if (a.peeing) {
     const h = d.head; a.pose = 'pee'; a.face = h.x >= a.x ? 1 : -1;
@@ -321,6 +368,15 @@ function updDecap(a) {
   }
   return t >= peeEnd;
 }
+const SCREAMS = ['AAAAAH!', 'HE IS A MONSTER!', 'I WANT MY MOMMY!', 'NOPE NOPE NOPE!', "I'M CALLING HR!", 'I QUIT! I QUIT!'];
+function scareAll(dur) {
+  let n = 0;
+  for (const e of enemies) {
+    if (e.T.untouchable || ['dead','ripped','enter','decap','kiss'].includes(e.state)) continue;
+    e.state = 'flee'; e.t = 0; e.fleeT = dur; e.vx = 0;
+    if (n++ < 2) say(e, pick(SCREAMS));
+  }
+}
 function pop(x, y, z, text, color, size) { pops.push({ x, y, z, text, color:color || '#fff', size:size || 14, life:75 }); }
 function say(e, text) { pops.push({ follow:e, text, life:130, bubble:true }); }
 
@@ -328,11 +384,22 @@ function say(e, text) { pops.push({ follow:e, text, life:130, bubble:true }); }
 function hittable(e) {
   return e.state !== 'dead' && e.state !== 'ripped' && e.state !== 'down' && e.state !== 'getup' && e.state !== 'enter' && e.inv <= 0;
 }
-// which finisher (if any) is available on this enemy: arm rip first, then decapitation
+// which grab finisher (L) is available: arm rip first, then decapitation. Kick (K) rips the heart whenever this is non-null.
+// Crying enemies can be finished at any health.
 function finisher(e) {
   if (e.T.untouchable || e.headless) return null;
-  if (!['idle','hurt','windup','attack','toss','stagger'].includes(e.state) || e.hp > e.maxHp * (e.T.boss ? .3 : .45)) return null;
+  if (!['idle','hurt','windup','attack','toss','stagger','flee','cry'].includes(e.state)) return null;
+  if (e.state !== 'cry' && e.hp > e.maxHp * (e.T.boss ? .3 : .45)) return null;
   return e.armless ? 'decap' : 'rip';
+}
+function nearestFinishable() {
+  let best = null, bd = 1e9;
+  for (const e of enemies) {
+    if (!finisher(e)) continue;
+    const dx = Math.abs(e.x - P.x), dy = Math.abs(e.y - P.y);
+    if (dx < 72 * (e.T.scale || 1) && dy < 24 && dx < bd) { best = e; bd = dx; }
+  }
+  return best;
 }
 const rippable = e => finisher(e) !== null;
 function hitEnemy(e, a, dir) {
@@ -350,6 +417,7 @@ function hitEnemy(e, a, dir) {
   bleed(e.x, e.y, 65 * (T.scale || 1), dir, a.weapon ? 12 : 4);
   if (a.weapon) SFX.squish(); else if (a.down) SFX.heavy(); else SFX.hit();
   if (e.hp <= 0) { killEnemy(e, dir, a); return true; }
+  if (e.state === 'cry' || e.state === 'flee') { e.vx = dir * 1.5; return true; }   // too busy sobbing/fleeing to react
   const armor = T.boss && ['windup','attack','charge','chargewind'].includes(e.state) && !a.special;
   if (armor) return true;
   if (a.down && (!T.boss || a.special || Math.random() < .35)) { e.state = 'down'; e.t = 0; e.vz = 5; e.vx = dir * a.kb; }
@@ -360,17 +428,18 @@ function killEnemy(e, dir, a) {
   e.state = 'dead'; e.t = 0; e.vz = 6.5; e.vx = dir * (a.kb + 2); e.hp = 0;
   score += e.T.score; SFX.die(); shake = Math.max(shake, e.T.boss ? 16 : 5);
   bleed(e.x, e.y, 65, dir, e.T.boss ? 60 : 22);
+  addDecal(e.x + dir * 20, e.y, rnd(10, 18));
   let txt = pick(QUIPS), col = '#ffd84a', size = 16;
   const ownArm = (a.armOwner === e) || (a.weapon && !a.armOwner && P.weapon && P.weapon.kind === 'arm' && P.weapon.owner === e);
   if (ownArm) { txt = 'BEATEN WITH THEIR OWN ARM!'; col = '#ff4040'; score += 500; size = 14; }
   if (e.T.boss) { txt = e.T.name + ' TERMINATED!'; size = 16; }
-  if (a.decap) score += 600; else pop(e.x, e.y, 115 * (e.T.scale || 1), txt, col, size);
+  if (a.decap || a.heart) score += 600; else pop(e.x, e.y, 115 * (e.T.scale || 1), txt, col, size);
   // employees drop the GPUs they were hoarding
   const n = e.T.boss ? 3 : (Math.random() < .4 ? 1 : 0);
   for (let i = 0; i < n; i++) items.push({ kind:'gpu', x:e.x + rnd(-30, 30), y:clamp(e.y + rnd(-14, 14), FT, FB) });
 }
 function hurtPlayer(dmg, dir, knock) {
-  if (P.inv > 0 || mode !== 'play' || ['down','special','rip','decap','victim','cutscene'].includes(P.state)) return;
+  if (P.inv > 0 || mode !== 'play' || ['down','special','rip','decap','victim','cutscene','heart'].includes(P.state)) return;
   P.hp -= dmg; P.flash = 12; SFX.hurt(); shake = Math.max(shake, 6);
   bleed(P.x, P.y, 60, dir, 6);
   P.atk = null; P.pend = null;
@@ -394,25 +463,70 @@ function checkPlayerHits() {
   }
 }
 function startAtk(a) { P.state = 'atk'; P.t = 0; P.atk = a; P.hitList = []; SFX.whiff(); }
+/* EPIC VULGAR ROAST: no damage, every coworker on screen breaks down sobbing for 5 seconds */
+const ROASTS = [
+  'YOU SHOULD HAVE BEEN ABORTED!',
+  "YOUR LINKEDIN IS A CRY FOR HELP, YOU SAD SACK OF SH*T!",
+  "I'VE TAKEN DUMPS WITH MORE VISION THAN YOUR WHOLE DEPARTMENT!"
+];
+const SOBS = ['WAAAAH!', '*SOB* *SOB*', "I'M TELLING HR!", 'MY THERAPIST WAS RIGHT!', 'I JUST WANTED A RAISE!', 'MOMMYYY!'];
+let roastIdx = 0, roastText = '', roastT = 0;
 function startSpecial() {
   P.state = 'special'; P.t = 0; P.hype = 0; P.atk = null; SFX.special();
-  pop(P.x, P.y, 150, 'BEHOLD... THE NEW ARCHITECTURE!', '#76ff03', 14);
+  roastText = ROASTS[roastIdx++ % ROASTS.length]; roastT = 170;
+}
+function roastHit() {
+  flashA = .6; shake = 14; SFX.boo();
+  projs = projs.filter(q => q.owner === 'p');
+  let n = 0;
+  for (const e of enemies) {
+    if (e.state === 'dead' || e.state === 'ripped' || e.state === 'enter' || e.x < camX - 20 || e.x > camX + W + 20) continue;
+    if (e.T.untouchable) { say(e, 'CUTE. KEEP TALKING, HANDSOME.'); continue; }
+    e.state = 'cry'; e.t = 0; e.cryT = 300; e.vx = 0; e.z = 0; e.vz = 0;
+    if (n++ < 3) say(e, pick(SOBS));
+  }
+}
+/* HEART RIP: punch through the chest, pull out the heart, stomp it flat */
+function startHeart(e) {
+  P.state = 'heart'; P.t = 0; P.hv = e; P.face = e.x >= P.x ? 1 : -1; P.organ = null;
+  e.state = 'ripped'; e.t = 0; e.vx = 0; e.z = 0; e.vz = 0;
+}
+function updHeart(p) {
+  const e = p.hv, sc = e.T.scale || 1, t = p.t;
+  if (t < 18) {
+    p.pose = t < 8 ? 'windup' : 'rip';
+    e.x = p.x + p.face * 34 * sc; e.y = p.y; e.face = -p.face; e.pose = 'ripped';
+    if (t === 9) { SFX.squish(); shake = 6; bleed(e.x, e.y, 20 * PX * sc, -p.face, 14); }
+  }
+  if (t === 18) {
+    p.organ = 'held'; SFX.rip(); shake = 10; hitstop = 6;
+    bleed(e.x, e.y, 20 * PX * sc, -p.face, 40); bleed(e.x, e.y, 20 * PX * sc, p.face, 20);
+    e.holed = true; e.state = 'heartless'; e.t = 0;
+    pop(p.x, p.y, 135, 'HEART RIPPED OUT!', '#ff3030', 18);
+  }
+  if (t > 18 && t < 34) p.pose = 'showheart';             // holds it up, still beating
+  if (t === 34) { p.organ = { x:p.x + p.face * 26, y:p.y + 2 }; p.pose = 'idle'; }
+  if (t >= 36 && t < 48) p.pose = 'stomp1';                 // knee up
+  if (t >= 48 && t < 64) p.pose = 'stomp2';                 // STOMP
+  if (t === 48) {
+    const o = p.organ; SFX.heavy(); SFX.squish(); SFX.splat(); shake = 20; hitstop = 8; flashA = gore ? .35 : 0;
+    bloodBurst(o.x, o.y, 90);
+    addDecal(o.x, o.y + 1, 30, 'rgba(110,0,0,.95)');
+    pop(o.x, o.y, 90, 'SPLAT!!', '#ff3030', 28);
+    p.organ = { x:o.x, y:o.y, flat:true };
+  }
+  if (t >= 64) { p.pose = 'idle'; p.organ = null; p.state = 'idle'; p.hv = null; }
 }
 function doGrab() {
   if (fin && fin.phase === 'fight') {
     const v = fin.v;
     if (Math.abs(v.x - P.x) < 80 && Math.abs(v.y - P.y) < 30) {
-      if (P.gpus > 0 && ['idle','wander','hurt'].includes(v.state)) { giveGpu(); return; }
+      if (P.gpus > 0 && ['idle','wander','hurt','tease'].includes(v.state)) { giveGpu(); return; }
       if (P.gpus <= 0) { pop(P.x, P.y, 120, 'NO GPUs! FIND SOME!', '#fff', 11); return; }
     }
   }
   if (P.weapon) { throwWeapon(); return; }
-  let best = null, bd = 1e9;
-  for (const e of enemies) {
-    if (!rippable(e)) continue;
-    const dx = Math.abs(e.x - P.x), dy = Math.abs(e.y - P.y);
-    if (dx < 72 * (e.T.scale || 1) && dy < 24 && dx < bd) { best = e; bd = dx; }
-  }
+  const best = nearestFinishable();
   if (best) {
     if (finisher(best) === 'decap') { P.state = 'decap'; P.t = 0; startDecap(P, best); }
     else startRip(best);
@@ -429,6 +543,7 @@ function doGrab() {
   }
 }
 function startRip(e) {
+  e.cryLeft = e.state === 'cry' ? e.cryT - e.t : 0;
   P.state = 'rip'; P.t = 0; P.ripT = e; P.face = e.x >= P.x ? 1 : -1;
   e.state = 'ripped'; e.t = 0; e.vx = 0; e.z = 0; e.vz = 0;
 }
@@ -462,14 +577,14 @@ function landProj(pr) {
 function giveGpu() {
   const v = fin.v; P.gpus--; fin.given++;
   P.state = 'pick'; P.t = 0; P.face = v.x >= P.x ? 1 : -1;
-  v.state = 'flirt'; v.t = 0; v.face = -P.face; v.cd = 60;
+  v.state = 'flirt'; v.t = 0; v.face = -P.face; v.cd = 60; v.flirtN = fin.given - 1;
   hearts(v.x, v.y, 110, 10); SFX.kiss();
   say(v, FLIRTS[Math.min(fin.given - 1, FLIRTS.length - 1)]);
   pop(P.x, P.y, 120, 'GPU GIVEN  ' + fin.given + '/' + GPU_GOAL, '#76ff03', 12);
   score += 1000;
   if (fin.given >= GPU_GOAL) {
     fin.phase = 'win'; fin.t = 0; P.state = 'cutscene'; P.pose = 'idle';
-    v.state = 'kiss'; v.t = 0; projs = [];
+    v.state = 'kiss'; v.t = 0; projs = []; items = [];
   }
 }
 function startFinalFail() {
@@ -500,14 +615,22 @@ function updFinal() {
     }
     if (fin.timer <= 0) { fin.timer = 0; startFinalFail(); }
   } else if (fin.phase === 'win') {
-    const tx = P.x + P.face * 46 * (v.T.scale || 1);
+    // she sashays over, then the romance-novel-cover dip
+    P.x = clamp(P.x, 160, W - 160); P.face = P.x < W / 2 ? 1 : -1;
+    const tx = P.x + P.face * 40;
     v.face = -P.face;
-    if (Math.abs(v.x - tx) > 4) { v.x += Math.sign(tx - v.x) * 2.5; v.y += Math.sign(P.y - v.y) * Math.min(2, Math.abs(P.y - v.y)); v.pose = 'walk'; }
-    else {
-      v.pose = 'kiss';
-      if (!fin.kissed) { fin.kissed = true; fin.t = 0; SFX.kiss(); SFX.fanfare(); pop(P.x, P.y, 170, 'SMOOCH!', '#ff4f9a', 26); }
-      if (frame % 6 === 0) hearts((P.x + v.x) / 2, P.y, 100, 2);
-      if (fin.kissed && fin.t > 150) { mode = 'win'; modeT = 0; endKind = 'kiss'; }
+    if (!fin.kissed && (Math.abs(v.x - tx) > 4 || Math.abs(v.y - P.y) > 2)) {
+      v.x += Math.sign(tx - v.x) * Math.min(2.5, Math.abs(tx - v.x)); v.y += Math.sign(P.y - v.y) * Math.min(2, Math.abs(P.y - v.y)); v.pose = 'walk';
+      if (fin.t % 10 === 0) hearts(v.x, v.y, 90, 1);
+    } else {
+      if (!fin.kissed) { fin.kissed = true; fin.t = 0; SFX.kiss(); SFX.fanfare(); }
+      v.x = P.x + P.face * 24; v.y = P.y + 1;
+      v.pose = 'dipped'; P.pose = 'dip';
+      fin.dip = Math.min(1, fin.t / 40);                     // ease into the dip
+      if (fin.t === 45) { SFX.kiss(); pop(P.x, P.y, 175, 'SMOOCH!', '#ff4f9a', 26); for (let i = 0; i < 4; i++) hearts(P.x + P.face * 10, P.y, 95, 6); }
+      if (frame % 5 === 0) hearts(P.x + P.face * 12, P.y, 100, 1);
+      if (frame % 3 === 0) parts.push({ x:rnd(-20, W), y:rnd(FT, FB), z:rnd(60, 260), vx:rnd(3, 6), vy:0, vz:0, life:120, c:pick(['#ff7ab8','#ff4f9a','#ffd1e0','#fff']), s:3, petal:true });
+      if (fin.t > 330) { mode = 'win'; modeT = 0; endKind = 'kiss'; }
     }
   }
 }
@@ -544,7 +667,7 @@ function updPlayer() {
         else if (w) throwWeapon();
         else { p.combo = p.comboT > 0 ? (p.combo + 1) % 3 : 0; startAtk(COMBO[p.combo]); }
       }
-      else if (pr('kick')) startAtk(ATK.kick);
+      else if (pr('kick')) { const f = !p.weapon && nearestFinishable(); if (f) startHeart(f); else startAtk(ATK.kick); }
       p.pend = null;
       break;
     }
@@ -566,6 +689,7 @@ function updPlayer() {
     case 'pick':  p.pose = 'idle';  if (p.t >= 8) p.state = 'idle'; break;
     case 'hurt':  p.pose = 'hurt';  if (p.t >= 18) p.state = 'idle'; break;
     case 'decap': if (updDecap(p)) { p.state = 'idle'; p.dc = null; p.peeing = false; } break;
+    case 'heart': updHeart(p); break;
     case 'victim': break;            // frozen while Vivian works
     case 'cutscene': p.pose = 'idle'; break;
     case 'down':
@@ -591,6 +715,7 @@ function updPlayer() {
       if (p.t === 7 || p.t === 14) { SFX.hit(); shake = 3; const s = shoulder(e); bleed(s.x, e.y, s.z, p.face, 3); }
       if (p.t === 20) {
         e.armless = true; e.hp = Math.max(1, e.hp - 8); e.state = 'stagger'; e.t = 0; e.vx = p.face * 3;
+        if (e.cryLeft > 0) { e.state = 'cry'; e.cryT = Math.max(e.cryLeft, 120); e.cryLeft = 0; }   // keeps sobbing
         const s = shoulder(e); bleed(s.x, e.y, s.z, -p.face, 45);
         addDecal(s.x, e.y + 2, 22);
         SFX.rip(); shake = 12; hitstop = 9;
@@ -601,16 +726,10 @@ function updPlayer() {
       if (p.t >= 32) { p.state = 'idle'; p.ripT = null; }
       break;
     }
-    case 'special':
-      p.pose = 'special';
-      if (p.t === 24) {
-        flashA = 1; shake = 18; hitstop = 6;
-        projs = projs.filter(q => q.owner === 'p');
-        for (const e of enemies)
-          if (hittable(e) && e.x > camX - 20 && e.x < camX + W + 20)
-            hitEnemy(e, { dmg:e.T.boss ? 45 : 40, down:true, kb:8, special:true }, e.x >= p.x ? 1 : -1);
-      }
-      if (p.t >= 56) p.state = 'idle';
+    case 'special':       // the roast
+      p.pose = p.t < 20 ? 'idle' : 'roast';
+      if (p.t === 20) roastHit();
+      if (p.t >= 80) p.state = 'idle';
       break;
   }
   p.y = clamp(p.y, FT, FB);
@@ -641,6 +760,7 @@ function updAI(e) {
   e.pose = moving ? 'walk' : 'idle';
   if (pDown) return;
   if (T.ranged && e.cd <= 0 && Math.abs(dy) < 22 && adx < 560 && adx > 90) { e.state = 'toss'; e.t = 0; e.cd = rnd(110, 170); return; }
+  if (T.untouchable && e.cd <= 0 && Math.random() < .006) { e.state = 'tease'; e.t = 0; return; }
   if (T.boss && e.cd <= 0 && adx > 220 && Math.abs(dy) < 30 && Math.random() < .02) { e.state = 'chargewind'; e.t = 0; return; }
   if ((e.aggro || T.ranged) && e.cd <= 0 && adx < T.reach * sc + 8 && Math.abs(dy) < 16) { e.state = 'windup'; e.t = 0; }
 }
@@ -659,6 +779,7 @@ function updEnemy(e) {
         const dx = (P.x - e.x) * e.face;
         if (dx > -5 && dx < T.reach * sc + 10 && Math.abs(P.y - e.y) < 20 && P.z < 35) {
           e.hitDone = true; hurtPlayer(Math.round(T.dmg * (e.armless ? .5 : 1)), e.face, T.boss && Math.random() < .4);
+          if (T.untouchable) say(e, pick(['NAUGHTY!', 'TSK TSK, DARLING.', 'TOO SLOW, HANDSOME!']));
         }
       }
       if (e.t >= 16) { e.state = 'idle'; e.cd = rnd(T.boss ? 40 : 60, T.boss ? 80 : 130); }
@@ -679,9 +800,47 @@ function updEnemy(e) {
     case 'getup': e.pose = 'hurt'; e.inv = 2; if (e.t >= 16) { e.state = 'idle'; e.cd = 30; } break;
     case 'ripped': e.pose = 'ripped'; break;
     case 'stagger': e.pose = 'hurt'; if (e.t % 3 === 0) spurt(e); if (e.t >= 60) { e.state = 'idle'; e.cd = 40; } break;
-    case 'flirt':
-      e.pose = 'kiss'; if (e.t % 10 === 0) hearts(e.x, e.y, 110, 1);
-      if (e.t >= 75) { e.state = 'wander'; e.t = 0; e.goal = { x:rnd(80, W - 80), y:rnd(FT, FB) }; }
+    case 'flirt': {                  // a different playful routine for each GPU
+      const move = FLIRT_MOVES[(e.flirtN || 0) % FLIRT_MOVES.length];
+      e.pose = move; e.face = P.x >= e.x ? 1 : -1;
+      if (move === 'twirl') { e.face = (e.t >> 3) % 2 ? 1 : -1; if (e.t % 8 === 0) hearts(e.x, e.y, 60, 2); }
+      if (move === 'blowkiss' && e.t === 34) blowKiss(e);
+      if (move === 'wink' && e.t === 20) { pop(e.x + e.face * 20, e.y, 130, '*WINK*', '#ff7ab8', 10); SFX.kiss(); }
+      if (move === 'hairflip' && e.t === 15) { for (let i = 0; i < 14; i++) parts.push({ x:e.x - e.face * 14, y:e.y, z:100, vx:rnd(-3, 3), vy:0, vz:rnd(1, 4), life:40, c:pick(['#fff6a0','#ffd84a','#fff']), s:2, float:true }); }
+      if (move === 'beckon' && e.t === 25) blowKiss(e);
+      if (e.t % 9 === 0) hearts(e.x, e.y, 105, 1);
+      if (e.t >= 95) { e.state = 'wander'; e.t = 0; e.goal = { x:rnd(80, W - 80), y:rnd(FT, FB) }; }
+      break;
+    }
+    case 'tease':                    // unprompted blown kiss between attacks
+      e.pose = 'blowkiss'; e.face = P.x >= e.x ? 1 : -1;
+      if (e.t === 1) say(e, pick(TEASES));
+      if (e.t === 34) blowKiss(e);
+      if (e.t >= 55) { e.state = 'idle'; e.cd = 40; }
+      break;
+    case 'cry':                      // roasted: sobbing, defenceless
+      e.pose = 'cry'; e.vx *= .8;
+      if (e.t % 4 === 0) tears(e);
+      if (e.t % 50 === 0 && Math.random() < .5) SFX.sob();
+      if (e.t >= (e.cryT || 300)) { e.state = 'idle'; e.cd = 40; }
+      break;
+    case 'flee': {                   // terrified after a decapitation
+      const away = e.x >= P.x ? 1 : -1;
+      e.face = -away; e.pose = 'flee';
+      const edge = away > 0 ? camX + W - 25 : camX + 25;
+      if (Math.abs(edge - e.x) > 8) e.x += away * T.spd * 1.9;
+      else e.x += Math.sin(e.t * 1.7) * 1.5;                  // cowering, trembling against the wall
+      if (e.t % 40 === 0) e.goalY = rnd(FT, FB);
+      if (e.goalY !== undefined) e.y += Math.sign(e.goalY - e.y) * Math.min(1.2, Math.abs(e.goalY - e.y));
+      if (e.t % 6 === 0) parts.push({ x:e.x + rnd(-8, 8), y:e.y, z:95 * sc, vx:rnd(-1, 1), vy:0, vz:rnd(1, 2), life:20, c:'#bfe9ff', s:2, tear:true });
+      if (e.t >= (e.fleeT || 300)) { e.state = 'idle'; e.cd = 30; }
+      break;
+    }
+    case 'heartless':                // staggering with a hole in the chest, then collapses
+      e.pose = 'hurt';
+      if (e.t % 2 === 0) chestSpurt(e);
+      if (e.t === 1) say(e, pick(['MY... HEART...', 'IS THAT MINE?', 'I NEEDED THAT!']));
+      if (e.t >= 30) killEnemy(e, -e.face, { kb:-1.2, heart:true });
       break;
     case 'wander': {
       e.pose = 'walk'; const gx = e.goal.x - e.x, gy = e.goal.y - e.y;
@@ -698,6 +857,8 @@ function updEnemy(e) {
       e.pose = 'down';
       if (e.armless && e.t % 4 === 0 && e.t < 60) spurt(e);
       if (e.headless && e.t % 3 === 0 && e.t < 90) neckSpurt(e);
+      if (e.holed && e.t % 4 === 0 && e.t < 70) chestSpurt(e);
+      if (gore && e.z === 0 && e.t % 10 === 0 && e.t < 120) addDecal(e.x - e.face * rnd(0, 60) * sc, e.y + rnd(-3, 3), rnd(6, 14) + e.t / 10);
       if (e.z === 0 && e.t > 20) {
         if (!e.puddled) { e.puddled = true; addDecal(e.x - e.face * 40 * sc, e.y, rnd(18, 28) * sc); }
         e.fade = (e.fade ?? 1) - .012;
@@ -769,15 +930,31 @@ function updWorld() {
 
 function updFx() {
   for (const p of parts) {
+    p.life--;
+    if (p.homing) {                         // blown kiss drifting to Jansen
+      const tx = P.x, tz = 85, dx = tx - p.x, dy = P.y - p.y, dz = tz - p.z, d = Math.hypot(dx, dz) || 1;
+      p.x += dx / d * 3.2; p.y += dy * .08; p.z += dz / d * 3.2 + Math.sin(p.life * .2) * 1.2;
+      if (d < 12) { p.life = 0; P.blush = 100; hearts(P.x, P.y, 85, 6); SFX.kiss(); pop(P.x, P.y, 125, '*BLUSH*', '#ff7ab8', 10); }
+      continue;
+    }
+    if (p.petal) { p.x += p.vx; p.z += Math.sin((p.life + p.x) * .08) * 1.2 - .3; continue; }
+    if (p.gpuFly) {                         // floor-end GPUs flying into Jansen's arms
+      p.t = (p.t || 0) + 1; if (p.t <= 0) continue;
+      const k = Math.min(1, p.t / 40);
+      p.x += (P.x - p.x) * k * .25; p.y += (P.y - p.y) * k * .25; p.z = 30 + Math.sin(k * Math.PI) * 120;
+      if (p.t >= 40) { p.life = 0; P.gpus++; SFX.pickup(); }
+      continue;
+    }
     if (p.z > 0 || p.vz > 0) { p.vz -= .35; p.z += p.vz; p.x += p.vx; p.y += p.vy; }
     if (p.z <= 0 && !p.landed) {
       p.z = 0; p.landed = true;
-      if (gore && p.c[1] !== 'f' && Math.random() < .25) addDecal(p.x, p.y, rnd(2, 5));
+      if (gore && !p.tear && !p.heart && p.c[1] !== 'f' && Math.random() < .5) addDecal(p.x, p.y, rnd(2, 6));
     }
-    p.life--;
   }
   parts = parts.filter(p => p.life > 0);
-  if (parts.length > 600) parts.splice(0, parts.length - 600);
+  if (parts.length > 1400) parts.splice(0, parts.length - 1400);
+  if (P && P.blush > 0) P.blush--;
+  if (roastT > 0) roastT--;
   for (const h of heads) {
     if (h.z > 0 || h.vz > 0) { h.vz -= GRAV; h.z += h.vz; h.x += h.vx; h.spin += .35 * Math.sign(h.vx || 1); }
     if (h.z <= 0) { h.z = 0; h.vz = 0; h.vx = 0; h.spin = 0; }
@@ -850,6 +1027,7 @@ function drawItem(kind, w) {
 
 function drawFighter(e) {
   const T = e.T, sc = T.scale || 1, pose = e.pose;
+  if (T.dress) { drawVivian(e); return; }
   ctx.save();
   ctx.translate(Math.round(e.x - camX), Math.round(e.y - e.z));
   ctx.scale(e.face * sc, sc);
@@ -861,8 +1039,15 @@ function drawFighter(e) {
   if (pose === 'down') { ctx.translate(0, -5 * PX); ctx.rotate(-Math.PI / 2); ctx.translate(-4 * PX, 0); }
 
   // legs
-  const legA = pose === 'walk' ? Math.round(Math.sin(e.anim * .3) * 3) : 0;
-  if (pose === 'kick' || pose === 'jumpkick') {
+  const legA = pose === 'walk' ? Math.round(Math.sin(e.anim * .3) * 3) : pose === 'flee' ? Math.round(Math.sin(e.anim * .7) * 4) : 0;
+  if (pose === 'cry') ctx.translate((frame % 6 < 3 ? 1 : -1), 0);
+  if (pose === 'stomp1') {
+    R(-4, -12, 3, 12, T.pants); R(-5, -2, 4, 2, T.shoe);
+    R(1, -15, 6, 3, T.pants); R(4, -13, 3, 6, T.pants); R(4, -8, 4, 2, T.shoe);
+  } else if (pose === 'stomp2') {
+    R(-5, -12, 3, 12, T.pants); R(-6, -2, 4, 2, T.shoe);
+    R(3, -12, 3, 12, T.pants); R(3, -2, 5, 2, T.shoe);
+  } else if (pose === 'kick' || pose === 'jumpkick') {
     R(-4, -12, 3, 12, T.pants); R(-5, -2, 4, 2, T.shoe);
     R(0, -15, 12, 3, T.pants); R(12, -16, 2, 5, T.shoe);
   } else if (pose === 'jump') {
@@ -872,12 +1057,18 @@ function drawFighter(e) {
     R(1 + legA, -12, 3, 12, T.pants); R(1 + legA, -2, 4, 2, T.shoe);
   }
 
-  const lean = (pose === 'hurt') ? -1 : (pose === 'punch' || pose === 'swing' || pose === 'ripped' || pose === 'rip') ? 1 : 0;
+  const lean = (pose === 'hurt') ? -1 : (pose === 'punch' || pose === 'swing' || pose === 'ripped' || pose === 'rip' || pose === 'flee') ? 1 : 0;
   ctx.translate(lean * PX, 0);
+  const tilt = { cry:.22, dip:.58, roast:-.1, stomp2:.12, flee:.12 }[pose];
+  if (tilt) { ctx.translate(0, -12 * PX); ctx.rotate(tilt); ctx.translate(0, 12 * PX); }
 
   // back arm
   if (pose === 'special') { R(-6, -36, 3, 12, T.top2); R(-6, -38, 3, 2, T.skin); }
   else if (pose === 'hurt') { R(-7, -29, 3, 7, T.top2); R(-7, -31, 3, 2, T.skin); }
+  else if (pose === 'cry') { R(-4, -29, 3, 7, T.top2); R(-3, -31, 3, 2, T.skin); }
+  else if (pose === 'flee') { R(-7, -34 + (frame >> 2) % 2, 3, 11, T.top2); R(-7, -36 + (frame >> 2) % 2, 3, 2, T.skin); }
+  else if (pose === 'dip') { R(-2, -24, 9, 3, T.top2); R(7, -24, 3, 3, T.skin); }
+  else if (pose === 'toast' || pose === 'roast') { R(-6, -23, 3, 6, T.top2); R(-5, -18, 3, 2, T.skin); }   // hand on hip
   else { R(-6, -23, 3, 9, T.top2); R(-6, -14, 3, 2, T.skin); }
   if (T.briefcase && pose !== 'down') { R(-9, -15, 7, 5, '#5a3a1a'); R(-7, -16, 3, 1, '#3a2410'); R(-6, -13, 1, 1, '#d4a020'); }
 
@@ -891,14 +1082,16 @@ function drawFighter(e) {
   if (T.tie) { R(-1, -25, 2, 2, '#fff'); R(-1, -23, 2, 9, T.tie); }
   if (T.lanyard) { R(-2, -24, 1, 6, '#e33'); R(2, -24, 1, 6, '#e33'); R(-1, -19, 3, 3, '#fff'); }
   R(-5, -13, 10, 1, '#111');
-
-  if (T.dress) { R(-6, -14, 12, 5, T.top); R(-6, -10, 12, 1, T.top2); R(-1, -25, 2, 3, T.skin); }
+  if (e.holed) { R(0, -22, 3, 3, gore ? '#5a0000' : '#222'); if (gore) { R(0, -22, 3, 1, '#b00000'); R(1, -20, 1, 1, '#eadcc4'); } }
 
   // head
   if (e.headless) {
     R(-2, -27, 4, 2, T.skin); R(-2, -27, 4, 1, gore ? '#b00000' : T.top2);
     if (gore) R(-1, -28, 2, 1, '#eadcc4');
-  } else drawHead(T, pose);
+  } else {
+    drawHead(T, pose);
+    if (e.blush > 0) { R(1, -28, 2, 1, '#ff7ab8'); R(-2, -28, 1, 1, '#ff7ab8'); }
+  }
 
   // held weapon (player)
   if (e.weapon && pose !== 'down') {
@@ -928,10 +1121,110 @@ function drawFighter(e) {
         else { R(2, -23, 10, 3, T.top); R(12, -23, 3, 3, T.skin); }
         break;
       case 'kick': case 'jumpkick': R(-1, -23, 3, 8, T.top); R(-1, -15, 3, 2, T.skin); break;
+      case 'cry': R(1, -29, 3, 6, T.top); R(1, -31, 4, 2, T.skin); break;                  // hands over face
+      case 'flee': { const w = (frame >> 2) % 2; R(3, -35 - w, 3, 11, T.top); R(3, -37 - w, 3, 2, T.skin); break; }
+      case 'roast': R(2, -26, 9, 3, T.top); R(11, -26, 2, 2, T.skin); R(13, -26, 2, 1, T.skin); break;
+      case 'stomp1': case 'stomp2': R(2, -25, 8, 2, T.top); R(10, -25, 2, 2, T.skin); break;
+      case 'dip': R(2, -21, 9, 3, T.top); R(11, -21, 3, 3, T.skin); break;
+      case 'toast': {
+        R(2, -32, 3, 9, T.top); R(2, -34, 3, 2, T.skin);
+        R(3, -37, 1, 3, '#e8e8e8'); R(2, -37, 3, 1, '#e8e8e8');                                // stem + foot
+        R(2, -43, 3, 6, 'rgba(255,225,110,.95)'); R(2, -43, 3, 1, '#fff8d0');                   // champagne
+        if (frame % 20 < 10) R(3, -41, 1, 1, '#fff'); else R(3, -40, 1, 1, '#fff');
+        break;
+      }
+      case 'showheart': {
+        R(2, -34, 3, 11, T.top); R(2, -36, 3, 2, T.skin);
+        const b = frame % 16 < 5 ? 1 : 0;                                                       // still beating
+        R(1 - b, -40 - b, 5 + 2 * b, 4 + b, '#c01020'); R(1 - b, -41 - b, 2, 1, '#c01020'); R(4 + b, -41 - b, 2, 1, '#c01020');
+        R(2, -40 - b, 1, 1, '#ff6a7a'); R(3, -37, 1, 1, '#7a0010');
+        break;
+      }
       default: { const s = pose === 'walk' ? Math.round(Math.sin(e.anim * .3) * -2) : 0; R(2 + s, -23, 3, 9, T.top); R(2 + s, -14, 3, 2, T.skin); }
     }
   }
   ctx.restore();
+}
+
+/* Vivian Voltage: strapless red gown with a thigh slit, heels, long dark waves, gold jewellery */
+function drawVivian(e) {
+  const T = e.T, sc = T.scale || 1, pose = e.pose, t = e.t;
+  const HAIR = '#1a0c10', HL = '#5a2434', DR = T.top, D2 = T.top2, SK = T.skin, RED = '#c0103a', GOLD = '#ffd84a';
+  ctx.save();
+  ctx.translate(Math.round(e.x - camX), Math.round(e.y - e.z));
+  ctx.scale(e.face * sc, sc);
+  if (e.flash > 0 && e.flash % 4 < 2) ctx.filter = 'brightness(2.2)';
+  const dip = pose === 'dipped' ? (fin ? fin.dip : 1) : 0;
+  if (dip) { ctx.translate(0, -14 * PX); ctx.rotate(-1.2 * dip); ctx.translate(0, 14 * PX); }
+  const swayPose = ['idle', 'wink', 'beckon', 'blowkiss', 'pee'].includes(pose);
+  if (swayPose) ctx.translate(Math.round(Math.sin(e.anim * .1) * 1.4) * PX * .5, 0);
+  const step = pose === 'walk' ? Math.round(Math.sin(e.anim * .3) * 2) : 0;
+  const lipsUp = (pose === 'blowkiss' && (t % 60) < 34) || pose === 'dipped';
+  const eyeShut = (pose === 'wink' && t > 12 && t < 60) || pose === 'dipped' || (pose === 'blowkiss' && (t % 60) < 30);
+
+  // long hair behind the body
+  if (!dip) {
+    if (pose === 'hairflip' && t < 45) { const k = Math.sin(Math.min(1, t / 20) * Math.PI); R(-6 - 5 * k | 0, -36 - 2 * k | 0, 5 + 4 * k | 0, 4, HAIR); R(-6, -33, 4, 9 - 5 * k | 0, HAIR); }
+    else { R(-6, -35, 4, 15, HAIR); R(-5, -21, 3, 2, HAIR); R(-6, -34, 1, 11, HL); R(-4, -20, 1, 1, HAIR); }
+  }
+  // legs + heels
+  if (dip) {
+    R(-3, -9, 2, 8, SK); R(-4, -1, 3, 1, RED);                        // standing leg
+    R(1, -13, 2, 6, SK); R(-3, -8, 5, 2, SK); R(-5, -9, 2, 2, RED);    // the romance-cover leg pop
+  } else {
+    R(-3 - step, -9, 2, 8, SK); R(-4 - step, -1, 3, 1, RED); R(-4 - step, 0, 1, 1, RED);
+    R(1 + step, -9, 2, 8, SK); R(1 + step, -1, 3, 1, RED); R(3 + step, 0, 1, 1, RED);
+  }
+  // gown: skirt with a high slit, cinched waist, strapless bodice
+  const flare = pose === 'twirl' ? 2 : 0;
+  R(-4 - flare, -17, 8 + 2 * flare, 8, DR); R(-4 - flare, -10, 8 + 2 * flare, 1, D2);
+  if (!dip) { R(1, -14, 2, 5, SK); R(0, -14, 1, 5, D2); }           // thigh slit
+  R(-3, -21, 6, 4, DR); R(-3, -18, 6, 1, D2);
+  R(-4, -25, 8, 4, DR); R(-4, -25, 8, 1, D2); R(-1, -23, 1, 2, D2);
+  R(-4, -27, 8, 2, SK); R(-1, -28, 2, 1, SK);                       // bare shoulders + neck
+  R(-1, -27, 3, 1, GOLD); if (frame % 30 < 6) R(0, -26, 1, 1, '#fff');
+
+  // back arm
+  if (pose === 'hairflip') { R(-5, -37, 2, 10, SK); }
+  else if (dip) { R(-6, -27, 2, 9, SK); }
+  else if (pose === 'twirl') { R(-9, -26, 6, 2, SK); }
+  else { R(-6, -26, 2, 4, SK); R(-5, -22, 2, 2, SK); R(-5, -23, 2, 1, GOLD); }   // hand on hip
+
+  // head
+  R(-3, -34, 6, 6, SK);
+  R(-4, -36, 8, 3, HAIR); R(1, -35, 3, 2, HAIR); R(-2, -36, 3, 1, HL); R(-4, -34, 2, 8, HAIR);
+  R(-1, -30, 1, 2, GOLD);                                            // earring
+  if (eyeShut) { R(1, -31, 2, 1, '#111'); R(3, -31, 1, 1, '#111'); }
+  else { R(1, -32, 3, 1, '#8a2a6a'); R(1, -31, 2, 1, '#fff'); R(2, -31, 1, 1, '#2a1020'); R(3, -32, 1, 1, '#111'); }
+  R(2, -29, 1, 1, '#ff8aa8');                                        // blush
+  if (lipsUp) { R(2, -29, 2, 1, '#e0104a'); R(3, -28, 1, 1, '#e0104a'); } else R(1, -28, 2, 1, '#e0104a');
+
+  // front arm
+  switch (pose) {
+    case 'windup': R(1, -35, 2, 9, SK); R(1, -36, 2, 1, GOLD); break;
+    case 'punch': case 'rip': R(3, -26, 8, 2, SK); R(11, -27, 2, 3, SK); break;
+    case 'blowkiss':
+      if ((t % 60) < 34) { R(3, -29, 2, 4, SK); R(2, -29, 2, 1, SK); }
+      else { R(3, -28, 7, 2, SK); R(10, -29, 2, 2, SK); }
+      break;
+    case 'wink': R(3, -28, 2, 3, SK); R(2, -29, 2, 1, SK); break;   // finger on chin
+    case 'hairflip': R(1, -38, 2, 12, SK); break;
+    case 'beckon': R(3, -25, 6, 2, SK); R(9, -27 + ((frame >> 3) & 1), 1, 3, SK); break;
+    case 'twirl': R(3, -26, 7, 2, SK); break;
+    case 'dipped': R(3, -27, 9, 2, SK); R(12, -28, 2, 2, SK); break;  // arm around his neck
+    case 'walk': { const s = Math.round(Math.sin(e.anim * .3) * -2); R(3 + s, -26, 2, 8, SK); R(3 + s, -20, 2, 1, GOLD); break; }
+    default: R(3, -26, 2, 8, SK); R(3, -20, 2, 1, GOLD);
+  }
+  ctx.restore();
+
+  // in the dip her hair cascades toward the floor
+  if (dip) {
+    const th = -1.2 * dip, rx = 17 * Math.sin(th), ry = -17 * Math.cos(th);
+    const hx = e.x - camX + e.face * sc * (rx - 2) * PX, hy = e.y - e.z + (-14 + ry) * PX * sc;
+    ctx.fillStyle = HAIR;
+    for (let i = 0; i < 9; i++) ctx.fillRect(hx - 6 + Math.sin(frame * .12 + i * .7) * 3, hy + i * 5, 12, 6);
+    ctx.fillStyle = HL; for (let i = 1; i < 8; i++) ctx.fillRect(hx - 2 + Math.sin(frame * .12 + i * .7) * 3, hy + i * 5, 2, 4);
+  }
 }
 
 function drawHead(T, pose) {
@@ -945,8 +1238,11 @@ function drawHead(T, pose) {
   else if (hurt) { R(2, -30, 1, 1, '#111'); R(4, -30, 1, 1, '#111'); }
   else if (pose === 'kiss') R(2, -29, 2, 1, '#111');
   else R(2, -29, 1, 1, '#111');
+  if (pose === 'cry') { R(1, -30, 2, 1, '#111'); R(4, -30, 1, 1, '#111'); R(2, -28, 1, 2, '#7cd4ff'); }
+  if (pose === 'flee') { R(2, -31, 2, 2, '#fff'); R(3, -30, 1, 1, '#111'); }
   if (T.mustache) R(1, -27, 4, 1, '#eee');
-  if (T.lips) { R(2, -27, 2, 1, '#e0104a'); if (pose === 'kiss') R(4, -27, 1, 1, '#e0104a'); }
+  if (pose === 'cry' || pose === 'flee' || pose === 'roast') R(2, -27, 3, 2, '#3a0808');
+  else if (T.lips) { R(2, -27, 2, 1, '#e0104a'); if (pose === 'kiss') R(4, -27, 1, 1, '#e0104a'); }
   else if (hurt) R(2, -27, 2, 2, '#5a1010');
   else if (!T.mustache) R(2, -27, 2, 1, T.ceo ? '#a07050' : '#7a3a2a');
 }
@@ -1073,10 +1369,36 @@ function drawBG() {
 function drawScene() {
   ctx.save();
   if (shake > 0) ctx.translate(rnd(-shake, shake), rnd(-shake, shake) * .6);
+  if (fin && fin.kissed) {           // slow push-in on the embrace
+    const z = 1 + 1.1 * Math.min(1, fin.t / 90), cx = P.x - camX + P.face * 14, cy = P.y - 55;
+    ctx.translate(W / 2, H / 2 + 40); ctx.scale(z, z); ctx.translate(-cx, -cy);
+  }
   drawBG();
+  // blood splattered on the wall, with drips that keep running down
+  for (const s of splats) {
+    const x = s.x - camX; if (x < -80 || x > W + 80) continue;
+    ctx.fillStyle = 'rgba(130,0,0,.85)';
+    ctx.beginPath(); ctx.arc(x, s.y, s.r * .7, 0, Math.PI * 2); ctx.fill();
+    for (const [bx, by, br] of s.blobs) { ctx.beginPath(); ctx.arc(x + bx, s.y + by, br, 0, Math.PI * 2); ctx.fill(); }
+    for (const d of s.drips) { d[1] = Math.min(d[1] + d[2], FT - 34 - s.y); ctx.fillRect(x + d[0], s.y, d[3], d[1]); ctx.fillRect(x + d[0] - 1, s.y + d[1] - 2, d[3] + 2, 3); }
+  }
+  // romance-novel sunset behind the final embrace
+  if (fin && fin.kissed) {
+    const a = Math.min(1, fin.t / 40), cx = P.x - camX + P.face * 14;
+    const g = ctx.createRadialGradient(cx, P.y - 90, 20, cx, P.y - 90, 420);
+    g.addColorStop(0, `rgba(255,236,170,${a})`); g.addColorStop(.35, `rgba(255,140,90,${a * .9})`); g.addColorStop(1, `rgba(120,20,80,${a * .85})`);
+    ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, H + 40);
+  }
   // decals
   for (const d of decals) { ctx.fillStyle = d.c; ctx.beginPath(); ctx.ellipse(d.x - camX, d.y, d.r, d.r * .35, 0, 0, Math.PI * 2); ctx.fill(); }
   for (const h of heads) { if (h.z <= 0) drawSevered(h); }
+  // a freshly ripped heart lying on the floor, still beating
+  if (P && P.organ && P.organ.x !== undefined && !P.organ.flat) {
+    const b = frame % 16 < 5 ? 1 : 0;
+    ctx.save(); ctx.translate(P.organ.x - camX, P.organ.y - 6);
+    R(-2 - b, -2 - b, 5 + 2 * b, 4 + b, '#c01020'); R(-2 - b, -3 - b, 2, 1, '#c01020'); R(1 + b, -3 - b, 2, 1, '#c01020'); R(-1, -2 - b, 1, 1, '#ff6a7a');
+    ctx.restore();
+  }
   // floor items
   for (const it of items) {
     const x = it.x - camX; if (x < -60 || x > W + 60) continue;
@@ -1102,13 +1424,21 @@ function drawScene() {
   // particles
   for (const p of parts) {
     ctx.fillStyle = p.c;
-    if (p.heart) { const x = p.x - camX, y = p.y - p.z; ctx.fillRect(x - 3, y - 2, 3, 3); ctx.fillRect(x + 1, y - 2, 3, 3); ctx.fillRect(x - 2, y, 5, 2); ctx.fillRect(x - 1, y + 2, 3, 2); }
+    if (p.gpuFly) { if (p.t > 0) { ctx.save(); ctx.translate(p.x - camX, p.y - p.z); drawItem('gpu', {}); ctx.restore(); } }
+    else if (p.heart) {
+      const x = p.x - camX, y = p.y - p.z, k = p.big ? 2 : 1;
+      ctx.fillRect(x - 3 * k, y - 2 * k, 3 * k, 3 * k); ctx.fillRect(x + 1 * k, y - 2 * k, 3 * k, 3 * k); ctx.fillRect(x - 2 * k, y, 5 * k, 2 * k); ctx.fillRect(x - 1 * k, y + 2 * k, 3 * k, 2 * k);
+    }
     else ctx.fillRect(p.x - camX, p.y - p.z, p.s, p.s);
   }
   // finisher prompts
   if (P && mode === 'play' && !P.weapon) for (const e of enemies) {
     const f = finisher(e);
-    if (f && frame % 30 < 20) txt(f === 'rip' ? 'L: RIP!' : 'L: DECAPITATE!', e.x - camX, e.y - 112 * (e.T.scale || 1), 10, '#ff3b3b');
+    if (f && frame % 30 < 20) {
+      const y = e.y - e.z - 148 * (e.T.scale || 1);
+      txt(f === 'rip' ? 'L: RIP ARM' : 'L: DECAPITATE', e.x - camX, y - 14, 9, '#ff3b3b');
+      txt('K: RIP HEART', e.x - camX, y, 9, '#ff7a7a');
+    }
   }
   if (fin && fin.phase === 'fight' && P.gpus > 0 && Math.abs(fin.v.x - P.x) < 80 && Math.abs(fin.v.y - P.y) < 30 && frame % 30 < 20)
     txt('L: GIVE GPU', fin.v.x - camX, fin.v.y - 150, 10, '#ff7ab8');
@@ -1127,26 +1457,57 @@ function drawScene() {
       ctx.globalAlpha = 1;
     }
   }
-  // keynote spotlight
-  if (P && P.state === 'special' && P.t < 24) {
+  // roast spotlight while Jansen winds up
+  if (P && P.state === 'special' && P.t < 20) {
     const g = ctx.createRadialGradient(P.x - camX, P.y - 50, 40, P.x - camX, P.y - 50, 320);
     g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.8)');
     ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, H + 40);
   }
   ctx.restore();
-  if (flashA > 0) { ctx.fillStyle = `rgba(200,255,160,${flashA})`; ctx.fillRect(0, 0, W, H); }
+  if (flashA > 0) { ctx.fillStyle = fin && fin.kissed ? `rgba(255,200,230,${flashA})` : `rgba(255,120,60,${flashA * .6})`; ctx.fillRect(0, 0, W, H); }
+  // the roast itself, in a giant speech balloon
+  if (roastT > 0 && P && mode === 'play') {
+    const s = Math.min(1, (170 - roastT) / 8), words = roastText.split(' '), lines = [''];
+    for (const w of words) { if ((lines[lines.length - 1] + ' ' + w).length > 26) lines.push(w); else lines[lines.length - 1] += (lines[lines.length - 1] ? ' ' : '') + w; }
+    const bw = 640, bh = 34 + lines.length * 30, bx = W / 2 - bw / 2, by = 104;
+    ctx.save(); ctx.translate(W / 2, by + bh / 2); ctx.scale(s, s); ctx.translate(-W / 2, -(by + bh / 2));
+    ctx.fillStyle = '#fff'; ctx.fillRect(bx, by, bw, bh);
+    const px = clamp(P.x - camX, bx + 40, bx + bw - 40);
+    ctx.beginPath(); ctx.moveTo(px - 16, by + bh); ctx.lineTo(px + 16, by + bh); ctx.lineTo(px, by + bh + 34); ctx.fill();
+    ctx.strokeStyle = '#000'; ctx.lineWidth = 4; ctx.strokeRect(bx, by, bw, bh);
+    lines.forEach((l, i) => txt(l, W / 2, by + 44 + i * 30, 18, i % 2 ? '#ff3b3b' : '#ffd84a'));
+    ctx.restore();
+  }
+  // romance novel cover framing for the ending
+  if (fin && fin.kissed) {
+    const a = Math.min(1, fin.t / 60);
+    ctx.globalAlpha = a;
+    ctx.strokeStyle = '#ffd84a'; ctx.lineWidth = 6; ctx.strokeRect(14, 14, W - 28, H - 28);
+    ctx.lineWidth = 2; ctx.strokeRect(24, 24, W - 48, H - 48);
+    ctx.textAlign = 'center'; ctx.lineJoin = 'round';
+    ctx.font = 'italic bold 52px Georgia, "Times New Roman", serif';
+    ctx.lineWidth = 6; ctx.strokeStyle = '#5a0a2a'; ctx.strokeText('Hostile Takeover', W / 2, 92);
+    const gr = ctx.createLinearGradient(0, 50, 0, 96); gr.addColorStop(0, '#fff4c0'); gr.addColorStop(1, '#ffb000');
+    ctx.fillStyle = gr; ctx.fillText('Hostile Takeover', W / 2, 92);
+    ctx.font = 'italic 22px Georgia, "Times New Roman", serif'; ctx.fillStyle = '#fff'; ctx.strokeStyle = '#5a0a2a'; ctx.lineWidth = 4;
+    ctx.strokeText('She wanted his GPUs. He wanted her heart.', W / 2, 126); ctx.fillText('She wanted his GPUs. He wanted her heart.', W / 2, 126);
+    ctx.font = 'italic 18px Georgia, "Times New Roman", serif';
+    ctx.strokeText('A NeuroForge Romance', W / 2, H - 44); ctx.fillText('A NeuroForge Romance', W / 2, H - 44);
+    ctx.globalAlpha = 1;
+  }
 }
 
 function drawHUD() {
+  if (fin && fin.kissed) return;      // keep the romance cover clean
   ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(10, 10, 360, 82);
   txt('JANSEN HU', 22, 32, 12, '#fff', 'left');
   txt('CEO', 150, 32, 8, '#aaa', 'left');
   txt('GPU x' + (P.gpus || 0), 200, 32, 9, '#76ff03', 'left');
   bar(22, 42, 240, 12, P.hp / P.maxHp, P.hp < 30 && frame % 20 < 10 ? '#fff' : '#e33', '#400');
   txt('x' + Math.max(0, lives), 276, 54, 12, '#ffd84a', 'left');
-  txt('HYPE', 22, 80, 8, '#76ff03', 'left');
-  bar(70, 70, 192, 10, P.hype / 100, P.hype >= 100 && frame % 20 < 10 ? '#fff' : '#76ff03', '#132');
-  if (P.hype >= 100) txt('I: KEYNOTE', 270, 80, 8, '#76ff03', 'left');
+  txt('ROAST', 22, 80, 8, '#ff7a3a', 'left');
+  bar(70, 70, 192, 10, P.hype / 100, P.hype >= 100 && frame % 20 < 10 ? '#fff' : '#ff7a3a', '#311');
+  if (P.hype >= 100) txt('I: ROAST!', 270, 80, 8, '#ff7a3a', 'left');
   txt('SCORE ' + String(score).padStart(7, '0'), W - 18, 32, 12, '#fff', 'right');
   txt(S.name + ' - ' + S.sub, W - 18, 54, 8, '#bbb', 'right');
   if (P.weapon) txt(WNAME[P.weapon.kind] + (P.weapon.uses > 1 ? ' x' + P.weapon.uses : ''), W - 18, 78, 9, '#ffd84a', 'right');
@@ -1198,8 +1559,8 @@ function drawTitle() {
   ctx.restore();
   ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(470, 220, 460, 230);
   const L = [
-    ['ARROWS/WASD', 'MOVE'], ['J', 'PUNCH (3-HIT COMBO)'], ['K', 'KICK'], ['SPACE', 'JUMP (+K = JUMP KICK)'],
-    ['L', 'GRAB: RIP ARM / PICK UP / THROW'], ['I', 'KEYNOTE (WHEN HYPE FULL)'], ['P', 'PAUSE'],
+    ['ARROWS/WASD', 'MOVE'], ['J', 'PUNCH (3-HIT COMBO)'], ['K', 'KICK / RIP HEART (FINISHER)'], ['SPACE', 'JUMP (+K = JUMP KICK)'],
+    ['L', 'GRAB: RIP ARM / DECAPITATE / THROW'], ['I', 'EPIC VULGAR ROAST'], ['P', 'PAUSE'],
   ];
   L.forEach(([k, v], i) => { txt(k, 490, 252 + i * 26, 9, '#ffd84a', 'left'); txt(v, 640, 252 + i * 26, 9, '#fff', 'left'); });
   txt('WEAKEN A COWORKER, THEN PRESS L. TWICE.', 700, 440, 8, '#ff7a7a');
@@ -1232,7 +1593,7 @@ function demoBot() {
   if (Math.abs(dx) <= 62 && Math.abs(dy) <= 10) {
     if ((P.face > 0) !== (dx > 0)) keys[dx > 0 ? 'right' : 'left'] = true;
     if (P.hype >= 100) pressed.special = true;
-    else if (finisher(e) && !P.weapon) pressed.grab = true;
+    else if (finisher(e) && !P.weapon) pressed[Math.random() < .35 ? 'kick' : 'grab'] = true;
     else pressed[Math.random() < .25 ? 'kick' : 'punch'] = true;
     demoCd = 8;
   }
@@ -1263,8 +1624,21 @@ function step() {
     modeT++; updFx();
     for (const e of enemies) updEnemy(e);
     enemies = enemies.filter(e => !(e.state === 'dead' && e.fade !== undefined && e.fade <= 0));
-    P.pose = 'idle'; P.t++;
-    if (modeT > 220 || (modeT > 60 && pressed.start)) {
+    P.t++;
+    // every GPU left on the floor flies to Jansen, then a champagne toast
+    if (modeT === 30) {
+      const g = items.filter(i => i.kind === 'gpu');
+      items = items.filter(i => i.kind !== 'gpu');
+      clearGpus = g.length;
+      g.forEach((it, i) => parts.push({ x:it.x, y:it.y, z:0, vx:0, vy:0, vz:0, life:999, c:'#76ff03', s:4, gpuFly:true, t:-i * 6 }));
+    }
+    P.pose = modeT > 90 ? 'toast' : 'idle'; P.face = 1;
+    if (modeT === 100) { SFX.clink(); }
+    if (modeT === 112) { SFX.clink(); pop(P.x, P.y, 95, 'CHEERS!', '#ffd84a', 18); }
+    if (modeT > 100 && modeT < 240 && frame % 3 === 0)
+      parts.push({ x:P.x + rnd(-120, 120), y:P.y + rnd(-20, 10), z:rnd(160, 260), vx:rnd(-1, 1), vy:0, vz:rnd(0, 2), life:90, c:pick(['#ffd84a','#ff4fa3','#4fd1ff','#7dff6a','#fff']), s:3 });
+    if (modeT > 300 || (modeT > 150 && pressed.start)) {
+      parts = parts.filter(p => { if (p.gpuFly) P.gpus++; return !p.gpuFly; });
       if (stageIdx + 1 < STAGES.length) { P.hp = Math.min(P.maxHp, P.hp + 40); loadStage(stageIdx + 1); }
       else { mode = 'win'; modeT = 0; }
     }
@@ -1281,9 +1655,10 @@ function draw() {
   if (mode === 'title') { drawTitle(); return; }
   drawScene(); drawHUD();
   if (mode === 'clear') {
-    ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(0, 180, W, 120);
-    txt('FLOOR CLEARED!', W / 2, 235, 28, '#ffd84a');
-    txt(stageIdx + 1 < STAGES.length ? 'TAKING THE ELEVATOR UP...' : 'THE BOARD HAS BEEN DISSOLVED.', W / 2, 272, 11, '#fff');
+    ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(0, 150, W, 140);
+    txt('FLOOR CLEARED!', W / 2, 200, 28, '#ffd84a');
+    if (modeT > 30) txt(clearGpus ? '+' + clearGpus + ' GPU' + (clearGpus > 1 ? 's' : '') + ' GRANTED TO THE CEO' : 'NO GPUs LEFT BEHIND', W / 2, 236, 12, '#76ff03');
+    if (modeT > 100) txt('A TOAST: TO THE GPUs, AND TO ME!', W / 2, 270, 11, '#fff');
   }
   if (mode === 'over' && modeT > 20) {
     if (endKind === 'vivian') drawEnd('ACQUIRED.', 'VIVIAN VOLTAGE NOW OWNS NEUROFORGE. AND YOUR HEAD.', '#ff4f9a');
