@@ -153,6 +153,10 @@ const SFX = {
   special: () => { [220, 277, 330, 440].forEach((f, i) => tone(.7, f, f * 2, .1, 'sawtooth', i * .06)); noise(.9, 4000, .3, 'lowpass', 200); },
   fanfare: () => { [523, 659, 784, 1046].forEach((f, i) => tone(.25, f, f, .1, 'square', i * .12)); },
   boo: () => { [392, 370, 349, 294].forEach((f, i) => tone(i === 3 ? .7 : .28, f, i === 3 ? f * .9 : f, .12, 'sawtooth', i * .3)); },
+  scrub: () => noise(.08, 2500, .05, 'bandpass'),
+  splash: () => noise(.3, 1200, .2, 'lowpass', 300),
+  crash: () => { noise(.6, 4000, .5, 'highpass'); tone(.3, 900, 200, .1, 'square'); },
+  zap: () => { tone(.4, 120, 80, .2, 'sawtooth'); noise(.4, 6000, .25, 'highpass'); tone(.3, 1800, 300, .08, 'square', .05); },
   sob: () => { tone(.25, 520, 380, .05, 'triangle'); tone(.3, 480, 300, .05, 'triangle', .28); },
   splat: () => { noise(.5, 400, .7, 'lowpass', 60); tone(.3, 80, 30, .35, 'sine'); },
   clink: () => { tone(.4, 2600, 2500, .08, 'sine'); tone(.5, 3900, 3800, .05, 'sine', .02); },
@@ -198,39 +202,22 @@ const ATK = {
 const COMBO = [ATK.jab, ATK.cross, ATK.upper];
 
 const STAGES = [
-  { name:'FLOOR 12', sub:'OPEN-PLAN PURGATORY', len:3600,
+  { name:'OFFICE FIGHT', sub:'FLOOR 12: OPEN-PLAN PURGATORY', len:3600,
     th:{ wall:'#cdbf9f', wall2:'#b9ab8b', ceil:'#e8e4da', floor:'#56657a', floor2:'#4b5a6e', base:'#6b5a40', sky:'#8cc4ec', city:'#5d7f9c', door:'#8a6a44' },
     posters:['SYNERGY','MOVE FAST','HUSTLE','Q4 OR DIE','THINK BIG'],
-    signs:['CONF RM B','SUPPLY','KITCHEN','SERVER RM'],
+    signs:['CONF RM B','SUPPLY','LEGAL','SERVER RM'],
     items:[[620,'mug'],[1250,'keyboard'],[1700,'donut'],[2200,'chair'],[2600,'mug'],[3000,'donut']],
     waves:[ { at:450,  e:['intern','intern','intern'] },
-            { at:1150, e:['intern','manager','intern','intern'] },
-            { at:1950, e:['manager','manager','intern','hr'] },
-            { at:2700, boss:true, e:['vp','intern','intern'] } ] },
-  { name:'FLOOR 30', sub:'LEGAL & HUMAN RESOURCES', len:3800,
-    th:{ wall:'#5a3f2c', wall2:'#4a3222', ceil:'#2e2218', floor:'#3d3040', floor2:'#332838', base:'#20140c', sky:'#f0a060', city:'#7a4a3a', door:'#2e1e12' },
-    posters:['COMPLIANCE','NO RUNNING','NDA','READ TERMS','LIABILITY'],
-    signs:['LEGAL','HR','DEPOSITIONS','ARCHIVES'],
-    items:[[550,'keyboard'],[1100,'donut'],[1500,'chair'],[2100,'mug'],[2500,'donut'],[3100,'chair'],[3300,'donut']],
-    waves:[ { at:450,  e:['lawyer','hr','intern'] },
-            { at:1150, e:['manager','manager','hr','intern'] },
-            { at:1900, e:['lawyer','lawyer','intern','intern','hr'] },
-            { at:2900, boss:true, e:['counsel','hr','lawyer'] } ] },
-  { name:'FLOOR 99', sub:'THE BOARDROOM', len:4000,
-    th:{ wall:'#2a2a34', wall2:'#22222a', ceil:'#111118', floor:'#d8d4cc', floor2:'#bdb8ae', base:'#b08a30', sky:'#1a1838', city:'#2e2a5a', door:'#4a3a1a' },
-    posters:['SHAREHOLDERS','VISION 2030','PROFIT','THE BOARD','ACQUIRE'],
-    signs:['BOARDROOM','PRIVATE','EXEC ONLY','VAULT'],
-    items:[[500,'chair'],[1000,'donut'],[1500,'keyboard'],[2000,'chair'],[2400,'donut'],[2900,'mug'],[3300,'donut'],[3400,'chair']],
-    waves:[ { at:450,  e:['lawyer','manager','manager'] },
-            { at:1200, e:['hr','hr','lawyer','intern','intern'] },
-            { at:2100, e:['lawyer','lawyer','manager','manager','hr'] },
-            { at:3100, boss:true, e:['chairman','manager','manager'] } ] },
-  { name:'FLOOR 100', sub:'THE PENTHOUSE', len:960, final:true,
+            { at:1150, e:['intern','manager','hr','intern'] },
+            { at:1950, e:['lawyer','manager','manager','intern','hr'] },
+            { at:2700, boss:true, e:['vp','intern','manager'] } ] },     // boss slot is re-rolled every time
+  { name:'ROMANTIC INTERLUDE', sub:'THE PENTHOUSE', len:960, final:true,
     th:{ wall:'#2a1030', wall2:'#22092a', ceil:'#14060f', floor:'#5a1a3a', floor2:'#4a1030', base:'#d4a020', sky:'#ff7a5a', city:'#5a2a5a', door:'#3a1a2a' },
     posters:['MERGERS','ACQUISITIONS','LUXURY','BUY BUY BUY','HOSTILE BIDS'],
     signs:['PENTHOUSE','SPA','WINE CELLAR','HELIPAD'],
     items:[[300,'gpu'],[700,'gpu']], waves:[] }
 ];
+const BOSSES = ['vp', 'counsel', 'chairman'];
 const GPU_GOAL = 5, FINAL_TIME = 30 * 60;
 
 /* ---------------- state ---------------- */
@@ -245,11 +232,11 @@ function newPlayer() {
   return { T:TYPES.player, x:120, y:430, z:0, vx:0, vz:0, face:1, hp:100, maxHp:100, state:'idle', t:0, pose:'idle',
            anim:0, combo:0, comboT:0, inv:0, flash:0, weapon:null, hype:0, hitList:[], atk:null, pend:null };
 }
-function startGame() { score = 0; lives = 2; P = newPlayer(); P.gpus = 0; endKind = ''; loadStage(0); }
 function loadStage(i) {
   stageIdx = i; S = STAGES[i]; camX = 0; lock = false; waveIdx = 0; queue = [];
   enemies = []; parts = []; pops = []; projs = []; decals = []; heads = []; splats = []; fin = null; roastT = 0;
   items = S.items.map(([x, k]) => ({ kind:k, x, y:rnd(FT + 25, FB - 15), uses:WUSES[k] }));
+  if (!S.final) S.waves[S.waves.length - 1].e[0] = pick(BOSSES);
   Object.assign(P, { x:120, y:430, z:0, vx:0, vz:0, face:1, state:'idle', t:0, weapon:null, atk:null, inv:60, dc:null, peeing:false, headless:false });
   banner = 200; goT = 0; mode = 'play';
   if (S.final) {
@@ -630,7 +617,7 @@ function updFinal() {
       if (fin.t === 45) { SFX.kiss(); pop(P.x, P.y, 175, 'SMOOCH!', '#ff4f9a', 26); for (let i = 0; i < 4; i++) hearts(P.x + P.face * 10, P.y, 95, 6); }
       if (frame % 5 === 0) hearts(P.x + P.face * 12, P.y, 100, 1);
       if (frame % 3 === 0) parts.push({ x:rnd(-20, W), y:rnd(FT, FB), z:rnd(60, 260), vx:rnd(3, 6), vy:0, vz:0, life:120, c:pick(['#ff7ab8','#ff4f9a','#ffd1e0','#fff']), s:3, petal:true });
-      if (fin.t > 330) { mode = 'win'; modeT = 0; endKind = 'kiss'; }
+      if (fin.t > 330) nextLevel();
     }
   }
 }
@@ -1019,6 +1006,10 @@ function drawItem(kind, w) {
       R(-5, -4, 4, 3, '#555'); R(1, -4, 4, 3, '#555'); R(-4, -3, 2, 1, '#999'); R(2, -3, 2, 1, '#999');
       R(-5, 0, 9, 1, '#d4a020');
       break;
+    case 'jacket':
+      R(-5, -9, 10, 10, '#161616'); R(-7, -9, 2, 8, '#161616'); R(5, -9, 2, 8, '#161616');
+      R(0, -9, 1, 10, '#666'); R(-3, -10, 6, 1, '#2e2e2e'); R(-4, -8, 1, 7, '#3a3a3a');
+      break;
     case 'memo':
       R(-3, -2, 6, 4, '#fafafa'); R(-2, -1, 4, 1, '#888'); R(-2, 1, 3, 1, '#888'); R(2, -2, 1, 1, '#c33');
       break;
@@ -1047,6 +1038,8 @@ function drawFighter(e) {
   } else if (pose === 'stomp2') {
     R(-5, -12, 3, 12, T.pants); R(-6, -2, 4, 2, T.shoe);
     R(3, -12, 3, 12, T.pants); R(3, -2, 5, 2, T.shoe);
+  } else if (pose === 'sit') {
+    R(-4, -13, 9, 3, T.pants); R(2, -11, 3, 10, T.pants); R(2, -2, 4, 2, T.shoe);
   } else if (pose === 'kick' || pose === 'jumpkick') {
     R(-4, -12, 3, 12, T.pants); R(-5, -2, 4, 2, T.shoe);
     R(0, -15, 12, 3, T.pants); R(12, -16, 2, 5, T.shoe);
@@ -1081,6 +1074,7 @@ function drawFighter(e) {
   }
   if (T.tie) { R(-1, -25, 2, 2, '#fff'); R(-1, -23, 2, 9, T.tie); }
   if (T.lanyard) { R(-2, -24, 1, 6, '#e33'); R(2, -24, 1, 6, '#e33'); R(-1, -19, 3, 3, '#fff'); }
+  if (T.apron) { R(-4, -21, 8, 9, T.apron); R(-4, -21, 8, 1, '#999'); R(-1, -25, 2, 4, T.apron); }
   R(-5, -13, 10, 1, '#111');
   if (e.holed) { R(0, -22, 3, 3, gore ? '#5a0000' : '#222'); if (gore) { R(0, -22, 3, 1, '#b00000'); R(1, -20, 1, 1, '#eadcc4'); } }
 
@@ -1121,6 +1115,8 @@ function drawFighter(e) {
         else { R(2, -23, 10, 3, T.top); R(12, -23, 3, 3, T.skin); }
         break;
       case 'kick': case 'jumpkick': R(-1, -23, 3, 8, T.top); R(-1, -15, 3, 2, T.skin); break;
+      case 'scrub': { const w = (frame >> 2) % 2; R(2, -23 + w, 9, 3, T.top); R(11, -23 + w, 3, 3, T.skin); break; }
+      case 'carry': R(2, -23, 8, 3, T.top); R(10, -23, 3, 3, T.skin); break;
       case 'cry': R(1, -29, 3, 6, T.top); R(1, -31, 4, 2, T.skin); break;                  // hands over face
       case 'flee': { const w = (frame >> 2) % 2; R(3, -35 - w, 3, 11, T.top); R(3, -37 - w, 3, 2, T.skin); break; }
       case 'roast': R(2, -26, 9, 3, T.top); R(11, -26, 2, 2, T.skin); R(13, -26, 2, 1, T.skin); break;
@@ -1230,10 +1226,12 @@ function drawVivian(e) {
 function drawHead(T, pose) {
   const hurt = pose === 'hurt' || pose === 'down' || pose === 'ripped' || pose === 'severed';
   R(-3, -32, 7, 7, T.skin);
-  if (T.ceo) { R(-4, -35, 8, 3, T.hair); R(-4, -33, 2, 4, T.hair); R(-3, -35, 6, 1, '#f2f2f2'); }
+  if (T.ceo) { R(-4, -35, 8, 3, T.hair); R(-4, -33, 2, 4, T.hair); R(-3, -35, 6, 1, T.hairHL || '#f2f2f2'); }
   else if (T.bald) { R(-4, -31, 2, 4, T.hair); R(-3, -33, 7, 1, T.skin); }
   else { R(-3, -34, 7, 2, T.hair); R(-4, -33, 2, 4, T.hair); }
   if (T.longhair && pose !== 'severed') R(-5, -33, 3, 10, T.hair);
+  if (T.paperhat) { R(-4, -37, 8, 2, '#fafafa'); R(-3, -39, 6, 2, '#fafafa'); R(-4, -36, 8, 1, '#c03030'); }
+  if (T.chefhat) { R(-4, -38, 8, 3, '#fafafa'); R(-5, -42, 10, 4, '#fafafa'); R(-4, -43, 3, 1, '#fafafa'); R(1, -43, 3, 1, '#fafafa'); }
   if (T.glasses) { R(1, -30, 4, 2, '#111'); R(2, -30, 1, 1, '#8cf'); R(-1, -30, 2, 1, '#111'); }
   else if (hurt) { R(2, -30, 1, 1, '#111'); R(4, -30, 1, 1, '#111'); }
   else if (pose === 'kiss') R(2, -29, 2, 1, '#111');
@@ -1563,17 +1561,626 @@ function drawTitle() {
     ['L', 'GRAB: RIP ARM / DECAPITATE / THROW'], ['I', 'EPIC VULGAR ROAST'], ['P', 'PAUSE'],
   ];
   L.forEach(([k, v], i) => { txt(k, 490, 252 + i * 26, 9, '#ffd84a', 'left'); txt(v, 640, 252 + i * 26, 9, '#fff', 'left'); });
-  txt('WEAKEN A COWORKER, THEN PRESS L. TWICE.', 700, 440, 8, '#ff7a7a');
+  txt('4 LEVELS. FAIL ONE AND YOU START OVER.', 700, 440, 8, '#ff7a7a');
   txt('G: GORE ' + (gore ? 'ON' : 'OFF (CONFETTI)'), W / 2, 486, 10, gore ? '#ff3b3b' : '#7cf');
   if (frame % 60 < 40) txt(IS_TOUCH ? 'TAP START' : 'PRESS ENTER', W / 2, 524, 16, '#fff');
 }
 
-function drawEnd(title, sub, col) {
+function drawEnd(title, sub, col, sub2) {
   ctx.fillStyle = 'rgba(0,0,0,.72)'; ctx.fillRect(0, 0, W, H);
   txt(title, W / 2, 200, 36, col);
   txt(sub, W / 2, 250, 11, '#fff');
+  if (sub2) txt(sub2, W / 2, 276, 10, '#ff7a7a');
   txt('FINAL SCORE ' + score, W / 2, 310, 16, '#ffd84a');
   if (frame % 60 < 40) txt('PRESS ENTER', W / 2, 400, 14, '#fff');
+}
+
+/* =====================================================================
+   LEVEL FLOW
+   Difficult Customers -> Office Fight -> Romantic Interlude -> Keeping the Marriage Together
+   Failing any level sends you back to level 1.
+   ===================================================================== */
+const LEVELS = [
+  { key:'diner', name:'DIFFICULT CUSTOMERS', lines:[
+      'THE GRIDDLE HOUSE, 10:00 PM. YOUNG JANSEN WASHES DISHES.',
+      'L: GRAB DIRTY PLATES, LOAD THE SINK, TAKE CLEAN ONES',
+      'HOLD J AT THE SINK TO SCRUB',
+      'STOCK THE PASS WITH CLEAN PLATES SO THE COOK CAN SERVE',
+      'GETTING YELLED AT FILLS MOTIVATION. FULL = TURBO SCRUB',
+      '5 WALKOUTS AND YOU ARE FIRED. LAST UNTIL 6:00 AM.' ] },
+  { key:'office', name:'OFFICE FIGHT', lines:[
+      'MANY YEARS LATER. JANSEN IS NOW CEO OF CLMIDIA.',
+      'J PUNCH   K KICK   SPACE JUMP   I ROAST',
+      'L GRABS: RIP ARM, THEN DECAPITATE. K RIPS OUT HEARTS.',
+      'FALLEN EMPLOYEES DROP GPUs. YOU WILL NEED THEM.',
+      'A MYSTERY BOSS WAITS AT THE END OF THE FLOOR.' ] },
+  { key:'romance', name:'ROMANTIC INTERLUDE', lines:[
+      'ESPIONAGE ALICE IS WAITING IN THE PENTHOUSE.',
+      'SHE WANTS GPUs. WALK UP TO HER AND PRESS L.',
+      'GIVE HER 5 GPUs IN 30 SECONDS.',
+      'FAIL, AND SHE TAKES YOUR HEAD INSTEAD.' ] },
+  { key:'therapy', name:'KEEPING THE MARRIAGE TOGETHER', lines:[
+      'YOU ARE THE THERAPIST. JANSEN IS MARRIED... TO HIS WORK.',
+      'WATCH THE SLIDES WITH HIM.',
+      'WHEN HE FALLS FOR WORK STUFF, ZAP HIM (ANY BUTTON).',
+      'NEVER ZAP HIM DURING FAMILY TIME.',
+      '3 STRIKES AND THE MARRIAGE IS OVER.' ] }
+];
+let levelIdx = 0, scene = 'brawl';
+function startGame() { score = 0; lives = 2; P = newPlayer(); P.gpus = 0; endKind = ''; paused = false; levelIdx = 0; mode = 'intro'; modeT = 0; }
+function startDemoGame() { score = 0; lives = 2; P = newPlayer(); P.gpus = 0; endKind = ''; paused = false; levelIdx = 1; beginLevel(); banner = 0; }
+function beginLevel() {
+  const k = LEVELS[levelIdx].key;
+  parts = []; pops = []; flashA = 0; shake = 0; paused = false;
+  if (k === 'diner') { scene = 'diner'; startDiner(); }
+  else if (k === 'office') { scene = 'brawl'; P.T = TYPES.player; P.hp = P.maxHp; P.gpus = 0; P.hype = 0; loadStage(0); }
+  else if (k === 'romance') { scene = 'brawl'; P.T = TYPES.player; P.hp = P.maxHp; loadStage(1); }
+  else { scene = 'therapy'; startTherapy(); }
+}
+function nextLevel() {
+  levelIdx++;
+  if (levelIdx >= LEVELS.length) { mode = 'win'; modeT = 0; endKind = 'final'; SFX.fanfare(); }
+  else { mode = 'intro'; modeT = 0; }
+}
+function drawIntro() {
+  const L = LEVELS[levelIdx];
+  for (let i = 0; i < 12; i++) { ctx.fillStyle = i % 2 ? '#12121c' : '#0d0d15'; ctx.fillRect(0, i * 45, W, 45); }
+  txt('LEVEL ' + (levelIdx + 1) + ' OF ' + LEVELS.length, W / 2, 90, 14, '#aaa');
+  txt(L.name, W / 2, 150, L.name.length > 20 ? 24 : 34, '#ffd84a');
+  L.lines.forEach((l, i) => txt(l, W / 2, 220 + i * 32, 11, i === 0 ? '#76ff03' : '#fff'));
+  txt('FAIL ANY LEVEL AND YOU START OVER FROM LEVEL 1.', W / 2, 455, 9, '#ff7a7a');
+  if (modeT > 30 && frame % 60 < 40) txt(IS_TOUCH ? 'TAP TO START' : 'PRESS ENTER', W / 2, 505, 16, '#fff');
+}
+// particles + popups + speech bubbles (shared by the non-brawler levels)
+function drawFxLayer() {
+  for (const p of parts) {
+    ctx.fillStyle = p.c;
+    if (p.heart) {
+      const x = p.x - camX, y = p.y - p.z, k = p.big ? 2 : 1;
+      ctx.fillRect(x - 3 * k, y - 2 * k, 3 * k, 3 * k); ctx.fillRect(x + k, y - 2 * k, 3 * k, 3 * k); ctx.fillRect(x - 2 * k, y, 5 * k, 2 * k); ctx.fillRect(x - k, y + 2 * k, 3 * k, 2 * k);
+    } else ctx.fillRect(p.x - camX, p.y - p.z, p.s, p.s);
+  }
+  for (const p of pops) {
+    if (p.bubble) {
+      const e = p.follow, sc = e.T.scale || 1, x = clamp(e.x - camX, 120, W - 120), y = e.y - e.z - 120 * sc;
+      ctx.font = `8px ${FONT}`; const w = ctx.measureText(p.text).width + 16;
+      ctx.fillStyle = '#fff'; ctx.fillRect(x - w / 2, y - 18, w, 24); ctx.fillRect(x - 4, y + 6, 8, 6);
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.strokeRect(x - w / 2, y - 18, w, 24);
+      ctx.fillStyle = '#000'; ctx.textAlign = 'center'; ctx.fillText(p.text, x, y - 2);
+    } else {
+      ctx.globalAlpha = Math.min(1, p.life / 20);
+      txt(p.text, clamp(p.x - camX, 200, W - 200), p.y - p.z, p.size, p.color);
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+function heartIcon(x, y, c) {
+  ctx.fillStyle = c; ctx.fillRect(x, y, 7, 7); ctx.fillRect(x + 9, y, 7, 7); ctx.fillRect(x + 2, y + 6, 12, 5); ctx.fillRect(x + 5, y + 11, 6, 3);
+}
+function drawPausedOverlay() {
+  ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(0, 0, W, H); txt('PAUSED', W / 2, H / 2, 28, '#fff'); txt('P TO RESUME', W / 2, H / 2 + 40, 10, '#aaa');
+}
+
+/* =================== LEVEL 1: DIFFICULT CUSTOMERS (dishwashing rush) =================== */
+TYPES.young = { skin:'#e2b48c', hair:'#1c1c1c', hairHL:'#3a3a3a', top:'#f2f2f2', top2:'#d2d2d2', pants:'#2a2a36', shoe:'#111', glasses:true, ceo:true, apron:'#cfc6b0', paperhat:true };
+TYPES.youngJacket = Object.assign({}, TYPES.player, { hair:'#1c1c1c', hairHL:'#3a3a3a' });
+TYPES.cook = { skin:'#c88a64', hair:'#2a1a10', top:'#f4f4f4', top2:'#d8d8d8', pants:'#3a3a3a', shoe:'#111', chefhat:true, mustache:true };
+TYPES.waitress = { skin:'#f2c6a8', hair:'#c8642a', top:'#e86a9a', top2:'#c04a78', pants:'#e86a9a', shoe:'#fff', longhair:true, apron:'#fafafa' };
+TYPES.sal = { skin:'#d8a47c', hair:'#3a2a1a', top:'#f4f4f4', top2:'#d0d0d0', pants:'#3a3a48', shoe:'#111', tie:'#2a4a9a', bald:true, mustache:true, scale:1.1 };
+const DN = { drop:140, sink:450, pass:800, reachY:FT + 80, shift:120 * 60, maxWalk:5, carryMax:3, sinkMax:8, rackMax:8, pileMax:16 };
+const INSULTS = ['MOVE IT, SUDS BOY!', "MY GRANDMA SCRUBS FASTER AND SHE'S DEAD!", 'ARE YOU WASHING THEM OR DATING THEM?',
+  "WE'RE OUT OF PLATES, GENIUS!", 'TABLE SIX IS EATING OFF A NAPKIN!', 'WORST DISHWASHER IN DINER HISTORY!',
+  'DID YOU LEARN TO SCRUB FROM A CEREAL BOX?', 'A RACCOON WOULD DO THIS JOB BETTER!', 'PLATES! PLATES! PLATES!'];
+const WALKOUT_LINES = ["I'M LEAVING!", 'ONE STAR!', 'WHERE IS MY FOOD?!', 'NEVER AGAIN!', "I'LL EAT IN MY CAR!"];
+let dn = null;
+const anchor = (x, y) => ({ x, y, z:0, T:{ scale:1 }, state:'idle' });
+
+function startDiner() {
+  mode = 'diner'; modeT = 0; camX = 0; enemies = []; items = []; projs = []; decals = []; splats = []; heads = []; fin = null; roastT = 0;
+  dn = { t:0, dirty:3, sink:0, clean:0, pass:4, scrub:0, carry:null, n:0, walk:0, mot:0, turbo:0, yellCd:300, spawnCd:60, claimCd:0, served:0, tables:[], cut:null,
+         cook:{ x:770, y:300, z:0, T:TYPES.cook, face:-1, pose:'idle', anim:0, t:0, state:'idle' },
+         wait:{ x:240, y:300, z:0, T:TYPES.waitress, face:1, pose:'walk', anim:0, t:0, state:'idle', dir:1 } };
+  for (let i = 0; i < 8; i++) { const x = 118 + i * 103; dn.tables.push({ x, state:'empty', pat:0, maxPat:1, t:0, pal:'intern', anchor:anchor(x, 228) }); }
+  Object.assign(P, { T:TYPES.young, x:450, y:430, z:0, vx:0, vz:0, face:1, state:'idle', pose:'idle', weapon:null, headless:false, flash:0, inv:0, blush:0 });
+}
+function dnStation() {
+  if (P.y > DN.reachY) return null;
+  if (Math.abs(P.x - DN.drop) < 70) return 'drop';
+  if (Math.abs(P.x - DN.sink) < 80) return 'sink';
+  if (Math.abs(P.x - DN.pass) < 70) return 'pass';
+  return null;
+}
+function dnHint(t) { pop(P.x, P.y, 125, t, '#fff', 9); }
+function dnGrab(st) {
+  const d = dn;
+  if (st === 'drop') {
+    if (d.carry === 'clean') return dnHint('HANDS FULL OF CLEAN PLATES!');
+    const take = Math.min(DN.carryMax - d.n, d.dirty);
+    if (take <= 0) return dnHint(d.dirty ? "CAN'T CARRY MORE!" : 'NO DIRTY DISHES... YET');
+    d.dirty -= take; d.n += take; d.carry = 'dirty'; SFX.pickup();
+  } else if (st === 'sink') {
+    if (d.carry === 'dirty') {
+      const put = Math.min(d.n, DN.sinkMax - d.sink);
+      if (put <= 0) return dnHint('SINK IS FULL! HOLD J TO SCRUB!');
+      d.sink += put; d.n -= put; if (!d.n) d.carry = null; SFX.splash();
+    } else {
+      const take = Math.min(DN.carryMax - d.n, d.clean);
+      if (take <= 0) return dnHint(d.sink ? 'HOLD J TO SCRUB!' : 'NOTHING CLEAN YET');
+      d.clean -= take; d.n += take; d.carry = 'clean'; SFX.pickup();
+    }
+  } else if (st === 'pass') {
+    if (d.carry !== 'clean') return dnHint('BRING CLEAN PLATES HERE');
+    d.pass += d.n; score += d.n * 20; d.n = 0; d.carry = null; SFX.clink();
+    pop(P.x, P.y, 120, 'PLATES UP!', '#76ff03', 12);
+  } else dnHint('GET CLOSER TO THE COUNTER');
+}
+function dnFail(why) { mode = 'over'; modeT = 0; endKind = 'diner'; dn.why = why; SFX.die(); }
+function dnPrompt() {
+  const d = dn, st = dnStation();
+  if (st === 'drop' && d.carry !== 'clean' && d.dirty && d.n < DN.carryMax) return 'L: GRAB DIRTY PLATES';
+  if (st === 'sink') {
+    if (d.carry === 'dirty') return 'L: LOAD THE SINK';
+    if (d.sink && d.clean < DN.rackMax) return 'HOLD J: SCRUB';
+    if (d.clean && d.n < DN.carryMax) return 'L: TAKE CLEAN PLATES';
+  }
+  if (st === 'pass' && d.carry === 'clean') return 'L: STOCK THE PASS';
+  return '';
+}
+function updDiner() {
+  const d = dn; d.t++; modeT++; P.t++; P.anim++;
+  if (P.flash > 0) P.flash--;
+  const prog = Math.min(1, d.t / DN.shift), turbo = d.turbo > 0;
+  // --- Jansen
+  const mx = (keys.right ? 1 : 0) - (keys.left ? 1 : 0), my = (keys.down ? 1 : 0) - (keys.up ? 1 : 0);
+  const spd = turbo ? 5.2 : 3.4;
+  P.x = clamp(P.x + mx * spd, 40, W - 40); P.y = clamp(P.y + my * spd * .7, FT + 10, FB);
+  if (mx) P.face = mx;
+  const st = dnStation();
+  const scrubbing = keys.punch && st === 'sink' && d.sink > 0 && d.clean < DN.rackMax && !d.carry;
+  if (keys.punch && st === 'sink' && d.clean >= DN.rackMax && frame % 60 === 0) dnHint('DRYING RACK FULL! MOVE THE CLEAN PLATES!');
+  if (keys.punch && st === 'sink' && d.carry && frame % 60 === 0) dnHint('PUT THE PLATES DOWN FIRST (L)');
+  P.pose = scrubbing ? 'scrub' : d.carry ? 'carry' : (mx || my) ? 'walk' : 'idle';
+  if (pressed.grab) dnGrab(st);
+  if (scrubbing) {
+    d.scrub += turbo ? 1 / 14 : 1 / 50;
+    if (frame % 3 === 0) parts.push({ x:DN.sink - 30 + rnd(-40, 40), y:258, z:rnd(0, 16), vx:rnd(-1, 1), vy:0, vz:1, life:30, c:pick(['#e8f6ff','#bfe6ff','#fff']), s:3, float:true });
+    if (frame % 9 === 0) SFX.scrub();
+    if (d.scrub >= 1) { d.scrub = 0; d.sink--; d.clean++; score += 25; SFX.pickup(); }
+  }
+  // --- customers arrive faster and get less patient as the night wears on
+  if (--d.spawnCd <= 0) {
+    const empty = d.tables.filter(t => t.state === 'empty');
+    if (empty.length) {
+      const tb = pick(empty);
+      Object.assign(tb, { state:'waiting', t:0, maxPat:(21 - 7 * prog) * 60, pal:pick(['intern','manager','lawyer','hr','chairman','vp']) });
+      tb.pat = tb.maxPat;
+    }
+    d.spawnCd = (4.2 - 2 * prog) * 60 * rnd(.7, 1.3);
+  }
+  // the cook grabs a clean plate for whoever has waited longest
+  if (d.claimCd > 0) d.claimCd--;
+  if (d.pass > 0 && d.claimCd <= 0) {
+    const w = d.tables.filter(t => t.state === 'waiting').sort((a, b) => a.pat - b.pat)[0];
+    if (w) { d.pass--; d.claimCd = 25; w.state = 'cooking'; w.t = 0; }
+  }
+  for (const tb of d.tables) {
+    tb.t++;
+    if (tb.state === 'waiting') {
+      if (--tb.pat <= 0) {
+        tb.state = 'empty'; d.walk++; say(tb.anchor, pick(WALKOUT_LINES)); SFX.boo(); shake = 6;
+        pop(tb.x, 300, 120, 'WALKOUT! ' + d.walk + '/' + DN.maxWalk, '#ff3b3b', 13);
+        if (d.walk >= DN.maxWalk) return dnFail('TOO MANY CUSTOMERS WALKED OUT.');
+      }
+    } else if (tb.state === 'cooking' && tb.t > 70) { tb.state = 'eating'; tb.t = 0; tb.eat = rnd(4, 6.5) * 60; }
+    else if (tb.state === 'eating' && tb.t > tb.eat) { tb.state = 'empty'; d.dirty++; d.served++; score += 50; }
+  }
+  // --- the dish pile can topple
+  if (d.dirty > DN.pileMax) {
+    d.dirty = 10; d.walk++; shake = 14; SFX.crash(); say(d.wait, 'ARE YOU KIDDING ME?!');
+    pop(DN.drop + 120, 300, 120, 'CRASH! A CUSTOMER LEFT IN DISGUST', '#ff3b3b', 12);
+    for (let i = 0; i < 20; i++) parts.push({ x:DN.drop + rnd(-30, 30), y:FT + 10, z:40, vx:rnd(-4, 4), vy:rnd(-1, 1), vz:rnd(2, 6), life:50, c:pick(['#fff','#ddd','#c9b48a']), s:3, tear:true });
+    if (d.walk >= DN.maxWalk) return dnFail('THE DISH PILE COLLAPSED ONE TOO MANY TIMES.');
+  }
+  // --- the staff yell at him... which only makes him stronger
+  const waiting = d.tables.filter(t => t.state === 'waiting').length;
+  const behind = (d.pass === 0 && waiting > 0) || d.dirty >= 10 || waiting >= 4;
+  if (d.yellCd > 0) d.yellCd--;
+  if (behind && d.yellCd <= 0 && !turbo) {
+    const who = Math.random() < .5 ? d.cook : d.wait;
+    say(who, pick(INSULTS)); SFX.hurt(); P.flash = 8;
+    d.mot = Math.min(100, d.mot + 34);
+    pop(P.x, P.y, 110, 'MOTIVATED!', '#ff7a3a', 10);
+    d.yellCd = rnd(150, 230);
+    if (d.mot >= 100) { d.turbo = 8 * 60; d.mot = 0; SFX.special(); flashA = .4; pop(P.x, P.y, 145, 'INSULTS = FUEL! TURBO SCRUB!', '#ff7a3a', 15); }
+  }
+  if (d.turbo > 0) {
+    d.turbo--;
+    if (frame % 2 === 0) parts.push({ x:P.x + rnd(-14, 14), y:P.y, z:rnd(0, 70), vx:-P.face * rnd(.5, 2), vy:0, vz:1, life:22, c:pick(['#ff7a1a','#ffd84a','#ff3b1a']), s:4, float:true });
+  }
+  // --- staff animation
+  d.cook.anim++; d.cook.pose = (frame >> 4) % 2 ? 'punch' : 'idle';
+  d.wait.anim++; d.wait.x += d.wait.dir * 1.2; if (d.wait.x > 360 || d.wait.x < 200) d.wait.dir *= -1; d.wait.face = d.wait.dir; d.wait.pose = 'walk';
+  // --- survived the shift
+  if (d.t >= DN.shift) { mode = 'dinerCut'; modeT = 0; startDinerCut(); }
+}
+function startDinerCut() {
+  const d = dn;
+  d.cut = { sal:{ x:W + 60, y:440, z:0, T:TYPES.sal, face:-1, pose:'walk', anim:0, t:0, state:'idle' }, jacket:null, holding:false };
+  for (const tb of d.tables) tb.state = 'empty';
+  d.carry = null; d.n = 0; d.turbo = 0; pops = [];
+  P.x = clamp(P.x, 260, 560); P.y = 440; P.face = 1; P.pose = 'idle';
+  SFX.fanfare(); score += 2000;
+}
+function updDinerCut() {
+  const d = dn, c = d.cut, s = c.sal; modeT++; s.anim++; P.anim++;
+  const tx = P.x + 90;
+  if (s.x > tx) { s.x -= 2.4; s.pose = 'walk'; } else s.pose = c.holding ? 'punch' : 'idle';
+  d.cook.anim++; d.wait.anim++; d.wait.pose = 'idle'; d.cook.pose = 'idle';
+  if (modeT === 100) say(s, 'KID. EIGHT HOURS. THEY YELLED AT YOU ALL NIGHT.');
+  if (modeT === 230) say(s, 'AND YOU JUST SCRUBBED HARDER.');
+  if (modeT === 360) { say(s, "THAT'S DEDICATION. TAKE THIS. YOU EARNED IT."); c.holding = true; }
+  if (modeT === 450) { c.holding = false; c.jacket = { x:s.x - 44, z:70, t:0 }; SFX.throw(); }
+  if (c.jacket) { c.jacket.t++; c.jacket.x += (P.x - c.jacket.x) * .12; c.jacket.z = 60 + Math.sin(Math.min(1, c.jacket.t / 30) * Math.PI) * 50; }
+  if (modeT === 485) {
+    c.jacket = null; P.T = TYPES.youngJacket; flashA = .7; SFX.fanfare();
+    pop(P.x, P.y, 150, 'LEATHER JACKET ACQUIRED!', '#ffd84a', 16);
+  }
+  if (modeT > 485 && modeT < 620 && frame % 3 === 0)
+    parts.push({ x:P.x + rnd(-30, 30), y:P.y, z:rnd(10, 110), vx:0, vy:0, vz:1, life:30, c:pick(['#ffd84a','#fff','#fff6a0']), s:3, float:true });
+  if (modeT === 560) say(P, 'SO... YELLING MAKES PEOPLE WORK HARDER.');
+  if (modeT === 690) say(P, 'I WILL NEVER TAKE THIS JACKET OFF.');
+  if (modeT >= 1000 || (modeT > 60 && pressed.start)) nextLevel();
+}
+
+function drawPlate(x, y, dirty) {
+  ctx.fillStyle = '#f6f6f6'; ctx.beginPath(); ctx.ellipse(x, y, 15, 4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#c8c8c8'; ctx.fillRect(x - 15, y, 30, 1);
+  if (dirty) { ctx.fillStyle = '#8a6a3a'; ctx.fillRect(x - 6, y - 2, 4, 2); ctx.fillRect(x + 3, y, 5, 2); ctx.fillStyle = '#b84a2a'; ctx.fillRect(x - 1, y - 1, 3, 2); }
+}
+function drawTable(tb) {
+  const x = tb.x;
+  ctx.fillStyle = '#c0303a'; ctx.fillRect(x - 38, 128, 76, 58); ctx.fillStyle = '#9a2030'; ctx.fillRect(x - 38, 128, 76, 6);
+  if (tb.state !== 'empty') {
+    const T = TYPES[tb.pal] || TYPES.intern, angry = tb.state === 'waiting' && tb.pat < tb.maxPat * .35;
+    const j = angry ? (frame % 4 < 2 ? 1 : -1) : 0;
+    ctx.fillStyle = T.top; ctx.fillRect(x - 14 + j, 150, 28, 34);
+    if (T.tie) { ctx.fillStyle = T.tie; ctx.fillRect(x - 2 + j, 152, 4, 20); }
+    ctx.fillStyle = angry ? '#e05040' : T.skin; ctx.fillRect(x - 10 + j, 126, 20, 22);
+    if (!T.bald) { ctx.fillStyle = T.hair; ctx.fillRect(x - 10 + j, 122, 20, 6); }
+    ctx.fillStyle = '#111'; ctx.fillRect(x - 5 + j, 134, 3, 3); ctx.fillRect(x + 3 + j, 134, 3, 3);
+    if (angry) { ctx.fillRect(x - 7 + j, 130, 5, 2); ctx.fillRect(x + 3 + j, 130, 5, 2); ctx.fillRect(x - 3 + j, 142, 7, 2); }
+  }
+  ctx.fillStyle = '#e8e8e8'; ctx.fillRect(x - 40, 184, 80, 8); ctx.fillStyle = '#999'; ctx.fillRect(x - 4, 192, 8, 40);
+  if (tb.state === 'waiting') {
+    const f = tb.pat / tb.maxPat;
+    bar(x - 30, 106, 60, 6, f, f < .35 ? '#ff3b3b' : f < .65 ? '#ffd84a' : '#76ff03', '#222');
+    ctx.fillStyle = '#fff'; ctx.fillRect(x + 20, 156, 14, 18); ctx.fillStyle = '#c03030'; ctx.fillRect(x + 26, 159, 3, 8); ctx.fillRect(x + 26, 169, 3, 3);
+  } else if (tb.state === 'cooking') {
+    if (frame % 30 < 20) txt('...', x, 116, 10, '#fff');
+  } else if (tb.state === 'eating') {
+    ctx.fillStyle = '#fff'; ctx.fillRect(x - 16, 180, 32, 5);
+    ctx.fillStyle = '#d8a050'; ctx.fillRect(x - 10, 175, 20, 6); ctx.fillStyle = '#f0d040'; ctx.fillRect(x - 3, 174, 6, 2);
+  }
+}
+function drawDiner() {
+  const d = dn;
+  ctx.save(); if (shake > 0) ctx.translate(rnd(-shake, shake), rnd(-shake, shake) * .6);
+  // back wall, checker trim, neon sign
+  ctx.fillStyle = '#e9dcb8'; ctx.fillRect(-20, -20, W + 40, FT + 20);
+  for (let x = 0; x < W; x += 24) { const a = (x / 24) % 2; ctx.fillStyle = a ? '#c03030' : '#f4f4f4'; ctx.fillRect(x, 44, 24, 10); ctx.fillStyle = a ? '#f4f4f4' : '#c03030'; ctx.fillRect(x, 54, 24, 10); }
+  txt('THE GRIDDLE HOUSE', W / 2, 32, 16, frame % 120 < 110 ? '#ff4fa3' : '#5a1a3a');
+  // the dining room through the pass-through window
+  ctx.fillStyle = '#3a2a22'; ctx.fillRect(50, 70, 860, 176);
+  ctx.fillStyle = '#7a2a2a'; ctx.fillRect(56, 76, 848, 110);
+  ctx.fillStyle = '#5a3a2a'; ctx.fillRect(56, 186, 848, 54);
+  for (let i = 0; i < 6; i++) { ctx.fillStyle = '#1a2040'; ctx.fillRect(86 + i * 140, 82, 70, 30); if ((i + (frame >> 7)) % 3 === 0) { ctx.fillStyle = '#f4e08a'; ctx.fillRect(100 + i * 140, 92, 4, 4); } }
+  for (const tb of d.tables) drawTable(tb);
+  // kitchen floor
+  ctx.fillStyle = '#c9d2d8'; ctx.fillRect(-20, FT - 10, W + 40, H - FT + 30);
+  ctx.fillStyle = '#b4bec6'; for (let x = 0; x < W; x += 40) for (let y = FT - 10; y < H; y += 40) if (((x + y) / 40) % 2 === 0) ctx.fillRect(x, y, 40, 40);
+  // staff behind the counter
+  drawFighter(d.wait); drawFighter(d.cook);
+  // counter
+  ctx.fillStyle = '#a8b2bc'; ctx.fillRect(-20, 258, W + 40, 14); ctx.fillStyle = '#7a848e'; ctx.fillRect(-20, 272, W + 40, 56); ctx.fillStyle = '#6a747e'; ctx.fillRect(-20, 272, W + 40, 4);
+  // pass: heat lamps, order tickets, clean plates for the cook
+  const waiting = d.tables.filter(t => t.state === 'waiting').length;
+  ctx.fillStyle = '#333'; ctx.fillRect(DN.pass - 70, 196, 140, 8);
+  ctx.fillStyle = 'rgba(255,90,40,.25)'; ctx.fillRect(DN.pass - 66, 204, 132, 54);
+  for (let i = 0; i < Math.min(waiting, 6); i++) { ctx.fillStyle = '#fffbe0'; ctx.fillRect(DN.pass - 64 + i * 22, 208, 18, 22); ctx.fillStyle = '#888'; ctx.fillRect(DN.pass - 61 + i * 22, 214, 12, 2); ctx.fillRect(DN.pass - 61 + i * 22, 219, 9, 2); }
+  for (let i = 0; i < Math.min(d.pass, 12); i++) drawPlate(DN.pass, 252 - i * 4, false);
+  if (d.pass === 0 && waiting > 0 && frame % 30 < 20) txt('NO PLATES!', DN.pass, 190, 10, '#ff3b3b');
+  txt('PASS', DN.pass, 300, 10, '#fff');
+  // bus tub of dirty plates
+  ctx.fillStyle = '#5a5f66'; ctx.fillRect(DN.drop - 48, 238, 96, 28);
+  for (let i = 0; i < Math.min(d.dirty, 18); i++) drawPlate(DN.drop + (i % 2 ? 6 : -6), 248 - i * 5, true);
+  txt('DIRTY', DN.drop, 300, 10, d.dirty >= 12 && frame % 20 < 10 ? '#ff3b3b' : '#fff');
+  if (d.dirty >= 12 && frame % 30 < 20) txt('ABOUT TO TOPPLE!', DN.drop + 30, 150 - (d.dirty - 12) * 5, 9, '#ff3b3b');
+  // sink + drying rack
+  ctx.fillStyle = '#c8ccd0'; ctx.fillRect(DN.sink - 34, 214, 6, 34); ctx.fillRect(DN.sink - 34, 214, 22, 6);
+  ctx.fillStyle = '#4a525a'; ctx.fillRect(DN.sink - 80, 246, 100, 22); ctx.fillStyle = '#9ad0e8'; ctx.fillRect(DN.sink - 76, 250, 92, 14);
+  for (let i = 0; i < d.sink; i++) drawPlate(DN.sink - 60 + (i % 4) * 18, 254 - Math.floor(i / 4) * 5, true);
+  if (d.sink) { ctx.fillStyle = '#fff'; for (let i = 0; i < 8; i++) ctx.fillRect(DN.sink - 74 + i * 11, 247 + Math.sin(frame * .2 + i) * 2, 6, 5); }
+  ctx.fillStyle = '#888'; ctx.fillRect(DN.sink + 28, 222, 62, 4); ctx.fillRect(DN.sink + 28, 252, 62, 4);
+  for (let i = 0; i < d.clean; i++) { ctx.fillStyle = '#f6f6f6'; ctx.fillRect(DN.sink + 31 + i * 7, 226, 5, 26); }
+  txt('SINK', DN.sink - 30, 300, 10, '#fff'); txt('CLEAN', DN.sink + 60, 300, 8, '#cfe');
+  if (d.sink) bar(DN.sink - 75, 200, 90, 7, d.scrub, d.turbo ? '#ff7a1a' : '#4fd1ff', '#223');
+  // floor actors
+  const actors = [P]; if (d.cut) actors.push(d.cut.sal);
+  actors.sort((a, b) => a.y - b.y);
+  for (const a of actors) drawShadow(a.x, a.y, 0, a.T.scale || 1);
+  for (const a of actors) { if (a === P && d.turbo > 0 && frame % 4 < 2) ctx.filter = 'brightness(1.5) saturate(1.8)'; drawFighter(a); ctx.filter = 'none'; }
+  for (let i = 0; i < d.n; i++) drawPlate(P.x + P.face * 26, P.y - 70 - i * 6, d.carry === 'dirty');
+  if (d.cut) {
+    const c = d.cut, s = c.sal;
+    if (c.holding) { ctx.save(); ctx.translate(s.x - 46, s.y - 66); drawItem('jacket', {}); ctx.restore(); }
+    if (c.jacket) { ctx.save(); ctx.translate(c.jacket.x, P.y - c.jacket.z); ctx.rotate(Math.sin(c.jacket.t * .3) * .3); drawItem('jacket', {}); ctx.restore(); }
+  }
+  if (mode === 'diner') { const h = dnPrompt(); if (h && frame % 40 < 30) txt(h, P.x, P.y - 122, 9, '#ffd84a'); }
+  drawFxLayer();
+  ctx.restore();
+  if (flashA > 0) { ctx.fillStyle = `rgba(255,200,120,${flashA})`; ctx.fillRect(0, 0, W, H); }
+}
+function drawDinerHUD() {
+  const d = dn;
+  if (mode === 'dinerCut') {
+    if (modeT < 100) { ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(0, 300, W, 70); txt('6:00 AM. SHIFT OVER.', W / 2, 345, 22, '#ffd84a'); }
+    if (modeT > 800) {
+      const a = Math.min(1, (modeT - 800) / 60);
+      ctx.fillStyle = `rgba(0,0,0,${a * .9})`; ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = a; txt(modeT < 900 ? 'A FORMATIVE MOMENT.' : 'MANY YEARS LATER...', W / 2, H / 2, 24, modeT < 900 ? '#ffd84a' : '#fff'); ctx.globalAlpha = 1;
+    }
+    if (modeT > 60) txt((IS_TOUCH ? 'TAP' : 'ENTER') + ': SKIP', W - 20, H - 14, 8, '#aaa', 'right');
+    return;
+  }
+  ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(10, 10, 300, 76);
+  txt('JANSEN, DISHWASHER', 22, 30, 10, '#fff', 'left');
+  txt('WALKOUTS', 22, 54, 8, '#ff7a7a', 'left');
+  for (let i = 0; i < DN.maxWalk; i++) { ctx.fillStyle = i < d.walk ? '#ff3b3b' : '#442222'; ctx.fillRect(104 + i * 22, 44, 16, 12); }
+  txt(d.turbo ? 'TURBO!' : 'MOTIVATION', 22, 78, 8, d.turbo ? (frame % 10 < 5 ? '#fff' : '#ff7a1a') : '#ff7a3a', 'left');
+  bar(130, 69, 166, 9, d.turbo ? d.turbo / 480 : d.mot / 100, '#ff7a1a', '#311');
+  const mins = Math.floor(Math.min(1, d.t / DN.shift) * 480), h24 = (22 * 60 + mins) % 1440, h12 = ((Math.floor(h24 / 60) + 11) % 12) + 1;
+  const clock = h12 + ':' + String(h24 % 60).padStart(2, '0') + (h24 >= 720 ? ' PM' : ' AM');
+  ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(W - 250, 10, 240, 76);
+  txt(clock, W - 22, 38, 16, '#ffd84a', 'right');
+  txt('SHIFT ENDS 6:00 AM', W - 22, 58, 8, '#bbb', 'right');
+  txt('SCORE ' + score, W - 22, 78, 9, '#fff', 'right');
+  if (paused) drawPausedOverlay();
+}
+
+/* =================== LEVEL 4: KEEPING THE MARRIAGE TOGETHER =================== */
+TYPES.therapist = { skin:'#8a5a3c', hair:'#2a1a12', top:'#3a7a6a', top2:'#2a5a4e', pants:'#3a3a48', shoe:'#111', longhair:true };
+const TH_IMAGES = [
+  { k:'family', cap:'FAMILY DINNER', art:'dinner' },
+  { k:'family', cap:"KID'S PIANO RECITAL", art:'piano' },
+  { k:'family', cap:'ANNIVERSARY CAKE', art:'cake' },
+  { k:'family', cap:'WEDDING PHOTO', art:'wedding' },
+  { k:'family', cap:'THE FAMILY DOG', art:'dog' },
+  { k:'family', cap:'BEACH VACATION', art:'beach' },
+  { k:'family', cap:"KID'S GPU-SHAPED BIRTHDAY CAKE", art:'gpucake' },
+  { k:'work', cap:'NEW FLAGSHIP GPU', art:'gpu', who:'A GPU' },
+  { k:'work', cap:'A FULLY LOADED SERVER RACK', art:'rack', who:'A SERVER RACK' },
+  { k:'work', cap:'LIMITED EDITION LEATHER JACKET', art:'jacket', who:'A LEATHER JACKET' },
+  { k:'work', cap:'ACQUISITION OPPORTUNITY', art:'memo', who:'A HOSTILE TAKEOVER' },
+  { k:'work', cap:'STOCK AT ALL-TIME HIGH', art:'stock', who:'THE STOCK PRICE' },
+  { k:'work', cap:'LIQUID-COOLED SUPERCOMPUTER', art:'super', who:'A SUPERCOMPUTER' }
+];
+const TH_TOTAL = 30, TH_STRIKES = 3, SCREEN = { x:330, y:44, w:300, h:168 };
+let th = null;
+function startTherapy() {
+  mode = 'therapy'; modeT = 0; camX = 0; enemies = []; items = []; projs = []; decals = []; splats = []; heads = []; fin = null; roastT = 0;
+  Object.assign(P, { T:TYPES.player, x:650, y:470, z:0, vx:0, vz:0, face:-1, pose:'sit', state:'idle', weapon:null, headless:false, blush:0, flash:0, inv:0 });
+  const fam = TH_IMAGES.filter(i => i.k === 'family'), work = TH_IMAGES.filter(i => i.k === 'work'), list = [];
+  let last = '';
+  for (let i = 0; i < TH_TOTAL; i++) { let img; do { img = Math.random() < .45 ? pick(work) : pick(fam); } while (img.art === last); last = img.art; list.push(img); }
+  th = { list, i:-1, img:null, t:0, dur:0, rise:0, love:0, strikes:0, zapT:0, gap:40, fell:false, zapped:false, after:0,
+         doc:{ x:220, y:470, z:0, T:TYPES.therapist, face:1, pose:'idle', anim:0, t:0, state:'idle' } };
+}
+function thNext() {
+  th.i++; th.after = 0;
+  if (th.i >= th.list.length) { mode = 'win'; modeT = 0; endKind = 'final'; SFX.fanfare(); return; }
+  const k = th.i / th.list.length;
+  th.img = th.list[th.i]; th.t = 0; th.love = 0; th.fell = false; th.zapped = false;
+  th.dur = Math.round(105 - 45 * k); th.rise = Math.round(70 - 28 * k);   // slides speed up as the session goes on
+  SFX.block();
+}
+function updTherapy() {
+  modeT++; P.anim++; th.doc.anim++;
+  if (th.zapT > 0) th.zapT--;
+  th.doc.pose = th.zapT > 30 ? 'punch' : 'idle'; P.pose = 'sit';
+  if (modeT < 100) { if (modeT === 30) say(th.doc, "LET'S BEGIN. JUST RELAX AND WATCH THE SCREEN."); return; }
+  if (!th.img) { if (--th.gap <= 0) thNext(); return; }
+  th.t++;
+  const work = th.img.k === 'work';
+  const zap = pressed.punch || pressed.kick || pressed.grab || pressed.jump || pressed.special || pressed.start;
+  if (work && !th.fell && !th.zapped && th.t > 12) {
+    th.love = Math.min(1, th.love + 1 / th.rise);
+    if (frame % 7 === 0 && th.love > .3) hearts(P.x - 8, P.y, 100, 1);
+    P.blush = th.love > .5 ? 10 : 0;
+    if (th.love >= 1) {
+      th.fell = true; th.strikes++; SFX.kiss(); hearts(P.x, P.y, 95, 14); shake = 6;
+      pop(W / 2, 470, 140, 'HE FELL IN LOVE WITH ' + th.img.who + '!', '#ff4f9a', 13);
+      say(P, pick(["IT'S SO... BEAUTIFUL.", 'I THINK I LOVE YOU.', 'HONEY, I CAN EXPLAIN!', 'JUST ONE MORE LOOK...']));
+    }
+  }
+  if (zap && !th.zapped && !th.fell) {
+    th.zapped = true; th.zapT = 45; shake = 10; flashA = .5; SFX.zap(); P.blush = 0;
+    for (let i = 0; i < 10; i++) parts.push({ x:P.x + rnd(-20, 20), y:P.y, z:rnd(70, 120), vx:rnd(-1, 1), vy:0, vz:1, life:40, c:pick(['#888','#aaa','#666']), s:5, float:true });
+    if (work) {
+      const perfect = th.love < .45; score += perfect ? 500 : 250;
+      pop(W / 2, 470, 140, perfect ? 'PERFECT ZAP!' : 'ZAPPED IN TIME!', '#76ff03', 16);
+      say(P, pick(['OUCH!', 'AAGH! WORTH IT.', 'MY FILLINGS!', 'I FEEL... CURED?']));
+    } else {
+      th.strikes++; pop(W / 2, 470, 140, 'YOU ZAPPED HIM DURING FAMILY TIME!', '#ff3b3b', 14);
+      say(P, pick(['WHY?! I LOVE MY FAMILY!', 'THAT WAS MY KID!', 'NOW I ASSOCIATE THEM WITH PAIN!']));
+    }
+    th.love = 0;
+  }
+  if (th.zapped || th.fell) th.after++;
+  if (th.t >= th.dur || th.after >= 40) {
+    if (!work && !th.zapped) { score += 100; if (Math.random() < .35) say(P, pick(['AWW.', 'I MISS THEM.', 'MAYBE I SHOULD GO HOME EARLY.'])); }
+    th.img = null; th.gap = 16;
+  }
+  if (th.strikes >= TH_STRIKES) { mode = 'over'; modeT = 0; endKind = 'divorce'; SFX.boo(); }
+}
+function drawSlide(a) {
+  const sk = '#e2b48c', bg = c => R(0, 0, 100, 56, c);
+  switch (a) {
+    case 'dinner':
+      bg('#f6e7c8'); R(0, 0, 100, 18, '#e8c8a0'); R(8, 34, 84, 4, '#8a5a2a'); R(12, 38, 3, 14, '#6a4020'); R(85, 38, 3, 14, '#6a4020');
+      R(16, 18, 7, 7, sk); R(16, 17, 7, 2, '#3a2a1a'); R(15, 25, 9, 9, '#4a7bd1');
+      R(70, 18, 7, 7, '#f0c8a0'); R(68, 16, 10, 3, '#8a3a1a'); R(68, 18, 2, 9, '#8a3a1a'); R(69, 25, 9, 9, '#e86a9a');
+      R(30, 22, 6, 6, '#f0c8a0'); R(30, 21, 6, 2, '#c8642a'); R(29, 28, 8, 6, '#7dd36a');
+      R(44, 29, 18, 5, '#b5651d'); R(47, 27, 12, 3, '#c8752d'); R(42, 33, 22, 1, '#fff');
+      break;
+    case 'piano':
+      bg('#f3e6f3'); R(0, 44, 100, 12, '#c8a07a'); R(14, 18, 44, 26, '#151515'); R(16, 30, 40, 5, '#fff');
+      for (let i = 0; i < 10; i++) R(17 + i * 4, 30, 1, 3, '#151515');
+      R(64, 24, 7, 7, '#f0c8a0'); R(63, 22, 9, 3, '#3a2a1a'); R(63, 31, 9, 13, '#e86a9a'); R(60, 33, 4, 2, '#f0c8a0');
+      R(78, 8, 2, 8, '#111'); R(80, 8, 4, 2, '#111'); R(76, 15, 3, 2, '#111'); R(88, 14, 2, 7, '#111'); R(86, 20, 3, 2, '#111');
+      break;
+    case 'cake':
+      bg('#fff0f5'); R(10, 46, 80, 3, '#ddd'); R(24, 30, 52, 16, '#ffb6cf'); R(24, 30, 52, 3, '#fff'); R(32, 20, 36, 10, '#fff3f8'); R(32, 20, 36, 2, '#ff7ab8');
+      for (let i = 0; i < 5; i++) { R(36 + i * 7, 12, 2, 8, '#7cd4ff'); R(36 + i * 7, 10 - (frame >> 3) % 2, 2, 2, '#ffb000'); }
+      txt('HAPPY ANNIVERSARY', 150, 24, 8, '#c03070');
+      break;
+    case 'wedding':
+      bg('#e8f0ff'); R(0, 44, 100, 12, '#bfe0b0');
+      R(34, 12, 7, 7, sk); R(34, 11, 7, 2, '#222'); R(32, 19, 11, 25, '#1a1a1a'); R(36, 19, 3, 6, '#fff');
+      R(56, 12, 7, 7, '#f0c8a0'); R(54, 10, 11, 4, '#5a3a1a'); R(52, 19, 15, 25, '#fff'); R(51, 9, 17, 16, 'rgba(255,255,255,.6)'); R(48, 30, 6, 6, '#ff7ab8');
+      R(46, 3, 3, 3, '#ff4f9a'); R(50, 3, 3, 3, '#ff4f9a'); R(47, 6, 5, 2, '#ff4f9a');
+      break;
+    case 'dog':
+      bg('#dff5df'); R(0, 44, 100, 12, '#9ad07a');
+      R(28, 26, 36, 14, '#c8964a'); R(60, 16, 16, 14, '#c8964a'); R(60, 14, 5, 10, '#8a5a2a'); R(74, 20, 3, 3, '#111'); R(68, 19, 2, 2, '#111'); R(70, 27, 4, 4, '#ff6a8a');
+      R(30, 40, 4, 8, '#c8964a'); R(56, 40, 4, 8, '#c8964a'); R(20, 22, 8, 3, '#c8964a'); R(58, 28, 4, 3, '#c03030');
+      txt('GOOD BOY', 150, 30, 9, '#2a6a2a');
+      break;
+    case 'beach':
+      bg('#8ad0ff'); R(0, 26, 100, 12, '#2a7ad0'); R(0, 38, 100, 18, '#f2d68a'); R(78, 4, 12, 12, '#ffd84a');
+      R(18, 12, 32, 4, '#e33'); R(22, 10, 24, 2, '#e33'); R(33, 16, 2, 24, '#fff');
+      R(56, 34, 5, 5, sk); R(55, 39, 7, 8, '#e86a9a'); R(66, 36, 4, 4, '#f0c8a0'); R(65, 40, 6, 6, '#7dd36a'); R(46, 47, 16, 3, '#ff7ab8');
+      break;
+    case 'gpucake':
+      bg('#fff0f5'); R(8, 46, 84, 3, '#ddd'); R(16, 26, 68, 20, '#4a4a52'); R(16, 26, 68, 2, '#ffb6cf');
+      R(24, 30, 16, 12, '#bdbdbd'); R(56, 30, 16, 12, '#bdbdbd'); R(30, 34, 4, 4, '#888'); R(62, 34, 4, 4, '#888');
+      for (let i = 0; i < 3; i++) { R(40 + i * 8, 18, 2, 8, '#ff7ab8'); R(40 + i * 8, 16 - (frame >> 3) % 2, 2, 2, '#ffb000'); }
+      for (let i = 0; i < 10; i++) R(18 + i * 7, 44, 2, 1, ['#ff7ab8','#7cd4ff','#ffd84a'][i % 3]);
+      txt('HAPPY BIRTHDAY!', 150, 26, 9, '#c03070');
+      break;
+    case 'gpu':
+      bg('#081008'); R(10, 14, 80, 28, 'rgba(118,255,3,.14)'); R(14, 18, 72, 22, '#1f1f24'); R(14, 18, 72, 2, '#76ff03');
+      R(22, 22, 16, 14, '#555'); R(56, 22, 16, 14, '#555'); R(28, 27, 4, 4, '#999'); R(62, 27, 4, 4, '#999');
+      R(20, 40, 44, 3, '#d4a020'); if (frame % 20 < 10) R(84, 12, 3, 3, '#fff');
+      break;
+    case 'rack':
+      bg('#0c1016'); R(30, 3, 40, 50, '#2a2e36');
+      for (let i = 0; i < 8; i++) { R(33, 6 + i * 6, 34, 4, '#3a404a'); R(35, 7 + i * 6, 1, 1, ((frame >> 3) + i) % 3 ? '#76ff03' : '#ff3b3b'); R(37, 7 + i * 6, 1, 1, ((frame >> 2) + i) % 2 ? '#4fd1ff' : '#123'); }
+      break;
+    case 'jacket':
+      bg('#2a0a14'); R(20, 0, 60, 56, 'rgba(255,220,180,.08)');
+      R(34, 14, 32, 32, '#161616'); R(26, 16, 8, 26, '#161616'); R(66, 16, 8, 26, '#161616');
+      R(49, 14, 2, 32, '#777'); R(40, 12, 20, 4, '#2e2e2e'); R(38, 18, 2, 20, '#3e3e3e'); R(72, 6, 16, 8, '#ffd84a');
+      txt('$$$', 240, 36, 7, '#000');
+      break;
+    case 'memo':
+      bg('#e8e4d8'); R(22, 4, 56, 48, '#fff'); for (let i = 0; i < 6; i++) R(28, 18 + i * 5, 40 - (i % 3) * 8, 1, '#999');
+      txt('ACQUIRE?', 150, 40, 10, '#111'); R(56, 36, 20, 10, '#c81e1e'); txt('YES', 198, 132, 9, '#fff');
+      break;
+    case 'stock':
+      bg('#0b1a10'); for (let i = 0; i < 10; i++) R(i * 10, 0, 1, 56, '#14301c'); for (let i = 0; i < 6; i++) R(0, i * 10, 100, 1, '#14301c');
+      ctx.strokeStyle = '#76ff03'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(10, 150);
+      [[40,140],[70,145],[100,120],[130,128],[170,90],[200,96],[240,50],[285,18]].forEach(([x, y]) => ctx.lineTo(x, y)); ctx.stroke();
+      txt('ATH!', 230, 150, 12, '#76ff03');
+      break;
+    case 'super':
+      bg('#0a1020');
+      for (let i = 0; i < 4; i++) { R(10 + i * 22, 8, 18, 42, '#1c2436'); R(12 + i * 22, 10, 14, 2, '#4fd1ff'); for (let j = 0; j < 5; j++) R(13 + i * 22, 15 + j * 7, 12, 4, '#26304a'); }
+      R(0, 50, 100, 3, '#2a7ad0'); for (let i = 0; i < 5; i++) R(((frame >> 1) + i * 20) % 100, 51, 3, 1, '#bfe9ff');
+      break;
+  }
+}
+function drawTherapy() {
+  ctx.save(); if (shake > 0) ctx.translate(rnd(-shake, shake), rnd(-shake, shake) * .6);
+  // the therapist's office
+  ctx.fillStyle = '#d9cdbd'; ctx.fillRect(-20, -20, W + 40, FT + 20);
+  ctx.fillStyle = '#c9bba8'; for (let x = 0; x < W; x += 48) ctx.fillRect(x, 0, 2, FT);
+  ctx.fillStyle = '#8a6a4a'; ctx.fillRect(-20, FT - 40, W + 40, 12);
+  ctx.fillStyle = '#6a5040'; ctx.fillRect(-20, FT - 28, W + 40, H);
+  ctx.fillStyle = '#5e4638'; for (let y = FT; y < H; y += 30) ctx.fillRect(0, y, W, 2);
+  for (let i = 0; i < 3; i++) {
+    const y = 70 + (i % 2) * 22;
+    ctx.fillStyle = '#5a3a1a'; ctx.fillRect(40 + i * 82, y, 62, 46); ctx.fillStyle = '#f8f4e8'; ctx.fillRect(45 + i * 82, y + 5, 52, 36);
+    ctx.fillStyle = '#999'; ctx.fillRect(52 + i * 82, y + 12, 36, 2); ctx.fillRect(52 + i * 82, y + 18, 28, 2); ctx.fillStyle = '#c03030'; ctx.fillRect(82 + i * 82, y + 28, 8, 8);
+  }
+  ctx.fillStyle = '#7a4a2a'; ctx.fillRect(880, 230, 40, 70); ctx.fillStyle = '#2e8a3e';
+  for (let l = 0; l < 6; l++) ctx.fillRect(866 + (l * 13) % 60, 150 + (l * 19) % 70, 16, 34);
+  // projector screen
+  ctx.fillStyle = '#222'; ctx.fillRect(SCREEN.x - 12, SCREEN.y - 12, SCREEN.w + 24, SCREEN.h + 46);
+  if (th.img) {
+    ctx.save(); ctx.beginPath(); ctx.rect(SCREEN.x, SCREEN.y, SCREEN.w, SCREEN.h); ctx.clip(); ctx.translate(SCREEN.x, SCREEN.y);
+    drawSlide(th.img.art); ctx.restore();
+    txt(th.img.cap, W / 2, SCREEN.y + SCREEN.h + 24, 10, th.img.k === 'work' && th.love > .5 ? '#ff7ab8' : '#fff');
+  } else {
+    ctx.fillStyle = '#dcdcdc'; ctx.fillRect(SCREEN.x, SCREEN.y, SCREEN.w, SCREEN.h);
+    txt(modeT < 100 ? 'SESSION STARTING...' : '...', W / 2, SCREEN.y + SCREEN.h / 2 + 6, 10, '#888');
+  }
+  // love meter
+  ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(SCREEN.x - 12, 256, SCREEN.w + 24, 26);
+  txt('LOVE', SCREEN.x - 2, 275, 9, '#ff7ab8', 'left');
+  bar(SCREEN.x + 50, 264, SCREEN.w - 56, 10, th.love, th.love > .7 && frame % 10 < 5 ? '#fff' : '#ff4f9a', '#3a1022');
+  // shock machine + wires
+  const mx = 345, my = 372;
+  ctx.strokeStyle = th.zapT > 0 && frame % 4 < 2 ? '#ffe23a' : '#222'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(mx + 40, my + 16); ctx.bezierCurveTo(480, 300, 560, 330, P.x - 8, P.y - 102); ctx.stroke();
+  ctx.fillStyle = '#4a4f58'; ctx.fillRect(mx - 40, my, 80, 70); ctx.fillStyle = '#2a2e36'; ctx.fillRect(mx - 40, my, 80, 6);
+  ctx.fillStyle = '#eee'; ctx.beginPath(); ctx.arc(mx - 16, my + 28, 13, 0, Math.PI * 2); ctx.fill();
+  const na = -2.4 + (th.zapT > 0 ? 2.2 : th.love * .8);
+  ctx.strokeStyle = '#c03030'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(mx - 16, my + 28); ctx.lineTo(mx - 16 + Math.cos(na) * 11, my + 28 + Math.sin(na) * 11); ctx.stroke();
+  ctx.fillStyle = th.zapT > 30 ? '#ff9090' : '#d02020'; ctx.beginPath(); ctx.arc(mx + 18, my + 28, 11, 0, Math.PI * 2); ctx.fill();
+  txt('DANGER', mx, my + 60, 7, '#ffd84a');
+  // chair
+  ctx.fillStyle = '#5a1a1a'; ctx.fillRect(P.x + 6, P.y - 112, 26, 100);
+  ctx.fillStyle = '#6a2020'; ctx.fillRect(P.x - 34, P.y - 40, 66, 12); ctx.fillStyle = '#333'; ctx.fillRect(P.x - 30, P.y - 28, 5, 28); ctx.fillRect(P.x + 24, P.y - 28, 5, 28);
+  // people
+  drawShadow(th.doc.x, th.doc.y, 0, 1); drawFighter(th.doc);
+  if (th.zapT > 0 && frame % 6 < 3) ctx.filter = 'invert(1)';
+  drawFighter(P); ctx.filter = 'none';
+  ctx.fillStyle = '#888'; ctx.fillRect(P.x - 13, P.y - 102, 26, 4); ctx.fillStyle = '#c03030'; ctx.fillRect(P.x - 15, P.y - 106, 6, 6); ctx.fillRect(P.x + 9, P.y - 106, 6, 6);
+  if (th.zapT > 0) {
+    ctx.strokeStyle = '#ffe23a'; ctx.lineWidth = 3;
+    for (let b = 0; b < 3; b++) {
+      const bx = P.x - 40 + b * 40; ctx.beginPath(); ctx.moveTo(bx, P.y - 150);
+      for (let s = 1; s < 6; s++) ctx.lineTo(bx + (s % 2 ? 10 : -10) + rnd(-4, 4), P.y - 150 + s * 14);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#d6d6d6';
+    for (let s = 0; s < 5; s++) { ctx.beginPath(); ctx.moveTo(P.x - 12 + s * 6, P.y - 104); ctx.lineTo(P.x - 9 + s * 6, P.y - 124 - (s % 2) * 6); ctx.lineTo(P.x - 6 + s * 6, P.y - 104); ctx.fill(); }
+  }
+  if (th.img && th.img.k === 'work' && th.love > .4 && !th.zapped) { heartIcon(P.x - 16, P.y - 94, '#ff2f7a'); }
+  drawFxLayer();
+  ctx.restore();
+  if (flashA > 0) { ctx.fillStyle = `rgba(255,255,170,${flashA})`; ctx.fillRect(0, 0, W, H); }
+}
+function drawTherapyHUD() {
+  ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(10, 10, 300, 66);
+  txt('MARRIAGE', 22, 34, 10, '#fff', 'left');
+  for (let i = 0; i < TH_STRIKES; i++) heartIcon(140 + i * 26, 20, i < TH_STRIKES - th.strikes ? '#ff4f9a' : '#442233');
+  txt('SLIDE ' + clamp(th.i + 1, 0, TH_TOTAL) + '/' + TH_TOTAL, 22, 62, 9, '#bbb', 'left');
+  ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(W - 250, 10, 240, 40);
+  txt('SCORE ' + score, W - 22, 36, 10, '#fff', 'right');
+  txt('ZAP (ANY BUTTON) WHEN HE FALLS FOR WORK. NEVER DURING FAMILY TIME.', W / 2, H - 12, 8, '#fff');
+  if (paused) drawPausedOverlay();
+}
+
+function drawEnding() {
+  if (mode === 'over' && modeT > 20) {
+    const again = 'YOU MUST START OVER FROM LEVEL 1.';
+    if (endKind === 'vivian') drawEnd('ACQUIRED.', 'ESPIONAGE ALICE NOW OWNS CLMIDIA. AND YOUR HEAD.', '#ff4f9a', again);
+    else if (endKind === 'diner') drawEnd("YOU'RE FIRED.", 'THE GRIDDLE HOUSE LETS YOU GO. ' + ((dn && dn.why) || ''), '#ff3b3b', again);
+    else if (endKind === 'divorce') drawEnd('DIVORCED.', 'HE LEFT HIS FAMILY FOR A GPU CLUSTER.', '#ff3b3b', again);
+    else drawEnd("YOU'RE FIRED.", 'THE BOARD ACCEPTS YOUR RESIGNATION.', '#ff3b3b', again);
+  }
+  if (mode === 'win') drawEnd('MARRIAGE SAVED', 'FAMILY FIRST. (MOSTLY.) HOSTILE TAKEOVER COMPLETE!', '#76ff03', '"...BUT THAT NEW GPU THOUGH."');
 }
 
 /* ---------------- main loop ---------------- */
@@ -1605,46 +2212,67 @@ function step() {
   if (demo) {
     if (anyInput) { anyInput = false; endDemo(); for (const k in pressed) delete pressed[k]; return; }
     demoT++;
-    if (demoT > 60 * 75 || mode === 'over' || mode === 'win') { endDemo(); return; }
+    if (demoT > 60 * 75 || (mode !== 'play' && mode !== 'clear')) { endDemo(); return; }
     demoBot();
   }
   anyInput = false;
   if (pressed.gore) { gore = !gore; if (mode === 'play') pop(P.x, P.y, 140, gore ? 'GORE ON' : 'GORE OFF', '#7cf', 12); }
-  if (mode === 'title') {
-    if (pressed.start || pressed.punch) { startGame(); titleIdle = 0; }
-    else if (Object.keys(pressed).length || Object.values(keys).some(Boolean)) titleIdle = 0;
-    else if (++titleIdle > 300) { titleIdle = 0; demo = true; demoT = 0; demoCd = 0; startGame(); }
-  } else if (mode === 'play') {
-    if (pressed.pause) paused = !paused;
-    if (!paused) {
-      if (hitstop > 0) { hitstop--; updFx(); delete pressed.gore; delete pressed.pause; delete pressed.start; return; } // keep attack inputs buffered through hitstop
-      update(); updFx();
-    }
-  } else if (mode === 'clear') {
-    modeT++; updFx();
-    for (const e of enemies) updEnemy(e);
-    enemies = enemies.filter(e => !(e.state === 'dead' && e.fade !== undefined && e.fade <= 0));
-    P.t++;
-    // every GPU left on the floor flies to Jansen, then a champagne toast
-    if (modeT === 30) {
-      const g = items.filter(i => i.kind === 'gpu');
-      items = items.filter(i => i.kind !== 'gpu');
-      clearGpus = g.length;
-      g.forEach((it, i) => parts.push({ x:it.x, y:it.y, z:0, vx:0, vy:0, vz:0, life:999, c:'#76ff03', s:4, gpuFly:true, t:-i * 6 }));
-    }
-    P.pose = modeT > 90 ? 'toast' : 'idle'; P.face = 1;
-    if (modeT === 100) { SFX.clink(); }
-    if (modeT === 112) { SFX.clink(); pop(P.x, P.y, 95, 'CHEERS!', '#ffd84a', 18); }
-    if (modeT > 100 && modeT < 240 && frame % 3 === 0)
-      parts.push({ x:P.x + rnd(-120, 120), y:P.y + rnd(-20, 10), z:rnd(160, 260), vx:rnd(-1, 1), vy:0, vz:rnd(0, 2), life:90, c:pick(['#ffd84a','#ff4fa3','#4fd1ff','#7dff6a','#fff']), s:3 });
-    if (modeT > 300 || (modeT > 150 && pressed.start)) {
-      parts = parts.filter(p => { if (p.gpuFly) P.gpus++; return !p.gpuFly; });
-      if (stageIdx + 1 < STAGES.length) { P.hp = Math.min(P.maxHp, P.hp + 40); loadStage(stageIdx + 1); }
-      else { mode = 'win'; modeT = 0; }
-    }
-  } else if (mode === 'over' || mode === 'win') {
-    modeT++; updFx();
-    if (modeT > 45 && pressed.start) mode = 'title';
+  switch (mode) {
+    case 'title':
+      if (pressed.start || pressed.punch) { startGame(); titleIdle = 0; }
+      else if (Object.keys(pressed).length || Object.values(keys).some(Boolean)) titleIdle = 0;
+      else if (++titleIdle > 300) { titleIdle = 0; demo = true; demoT = 0; demoCd = 0; startDemoGame(); }
+      break;
+    case 'intro':
+      modeT++;
+      if (modeT > 30 && (pressed.start || pressed.punch || pressed.grab)) beginLevel();
+      break;
+    case 'play':
+      if (pressed.pause) paused = !paused;
+      if (!paused) {
+        if (hitstop > 0) { hitstop--; updFx(); delete pressed.gore; delete pressed.pause; delete pressed.start; return; } // keep attack inputs buffered through hitstop
+        update(); updFx();
+      }
+      break;
+    case 'clear':
+      modeT++; updFx();
+      for (const e of enemies) updEnemy(e);
+      enemies = enemies.filter(e => !(e.state === 'dead' && e.fade !== undefined && e.fade <= 0));
+      P.t++;
+      // every GPU left on the floor flies to Jansen, then a champagne toast
+      if (modeT === 30) {
+        const g = items.filter(i => i.kind === 'gpu');
+        items = items.filter(i => i.kind !== 'gpu');
+        clearGpus = g.length;
+        g.forEach((it, i) => parts.push({ x:it.x, y:it.y, z:0, vx:0, vy:0, vz:0, life:999, c:'#76ff03', s:4, gpuFly:true, t:-i * 6 }));
+      }
+      P.pose = modeT > 90 ? 'toast' : 'idle'; P.face = 1;
+      if (modeT === 100) SFX.clink();
+      if (modeT === 112) { SFX.clink(); pop(P.x, P.y, 95, 'CHEERS!', '#ffd84a', 18); }
+      if (modeT > 100 && modeT < 240 && frame % 3 === 0)
+        parts.push({ x:P.x + rnd(-120, 120), y:P.y + rnd(-20, 10), z:rnd(160, 260), vx:rnd(-1, 1), vy:0, vz:rnd(0, 2), life:90, c:pick(['#ffd84a','#ff4fa3','#4fd1ff','#7dff6a','#fff']), s:3 });
+      if (modeT > 300 || (modeT > 150 && pressed.start)) {
+        parts = parts.filter(p => { if (p.gpuFly) P.gpus++; return !p.gpuFly; });
+        nextLevel();
+      }
+      break;
+    case 'diner':
+      if (pressed.pause) paused = !paused;
+      if (!paused) { updDiner(); updFx(); }
+      break;
+    case 'dinerCut': updDinerCut(); updFx(); break;
+    case 'therapy':
+      if (pressed.pause) paused = !paused;
+      if (!paused) { updTherapy(); updFx(); }
+      break;
+    case 'over':
+      modeT++; updFx();
+      if (modeT > 45 && pressed.start) startGame();
+      break;
+    case 'win':
+      modeT++; updFx();
+      if (modeT > 45 && pressed.start) mode = 'title';
+      break;
   }
   for (const k in pressed) delete pressed[k];
 }
@@ -1653,18 +2281,19 @@ function draw() {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
   if (mode === 'title') { drawTitle(); return; }
-  drawScene(); drawHUD();
-  if (mode === 'clear') {
-    ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(0, 150, W, 140);
-    txt('FLOOR CLEARED!', W / 2, 200, 28, '#ffd84a');
-    if (modeT > 30) txt(clearGpus ? '+' + clearGpus + ' GPU' + (clearGpus > 1 ? 's' : '') + ' GRANTED TO THE CEO' : 'NO GPUs LEFT BEHIND', W / 2, 236, 12, '#76ff03');
-    if (modeT > 100) txt('A TOAST: TO THE GPUs, AND TO ME!', W / 2, 270, 11, '#fff');
+  if (mode === 'intro') { drawIntro(); return; }
+  if (scene === 'diner') { drawDiner(); drawDinerHUD(); }
+  else if (scene === 'therapy') { drawTherapy(); drawTherapyHUD(); }
+  else {
+    drawScene(); drawHUD();
+    if (mode === 'clear') {
+      ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(0, 150, W, 140);
+      txt('FLOOR CLEARED!', W / 2, 200, 28, '#ffd84a');
+      if (modeT > 30) txt(clearGpus ? '+' + clearGpus + ' GPU' + (clearGpus > 1 ? 's' : '') + ' GRANTED TO THE CEO' : 'NO GPUs LEFT BEHIND', W / 2, 236, 12, '#76ff03');
+      if (modeT > 100) txt('A TOAST: TO THE GPUs, AND TO ME!', W / 2, 270, 11, '#fff');
+    }
   }
-  if (mode === 'over' && modeT > 20) {
-    if (endKind === 'vivian') drawEnd('ACQUIRED.', 'ESPIONAGE ALICE NOW OWNS CLMIDIA. AND YOUR HEAD.', '#ff4f9a');
-    else drawEnd("YOU'RE FIRED.", 'THE BOARD ACCEPTS YOUR RESIGNATION.', '#ff3b3b');
-  }
-  if (mode === 'win') drawEnd('MERGER COMPLETE', 'ESPIONAGE ALICE ACCEPTS YOUR PROPOSAL. CLMIDIA IS YOURS.', '#ff4f9a');
+  drawEnding();
   if (demo) {
     ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(0, H - 92, W, 34);
     if (frame % 60 < 40) txt('DEMO - PRESS ANY BUTTON', W / 2, H - 68, 14, '#ffd84a');
